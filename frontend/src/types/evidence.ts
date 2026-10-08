@@ -1,13 +1,7 @@
 /** Mirrors backend/app/schemas/evidence.py and operations.py. Keep in sync. */
+import type { AnalysisRecord } from "./analysis";
 
 export type Operation = "lsb_steganography_embed" | "watermark_embed" | "dct_watermark_embed" | "attack";
-
-export interface FindingSet {
-  analyzer: string;
-  analyzer_version: string;
-  indicators: Record<string, unknown>[];
-  notes: string[];
-}
 
 export type FieldStatus = "available" | "not_available" | "unknown";
 
@@ -71,10 +65,34 @@ export interface EvidenceArtifact {
   height: number;
   created_at: string; // ISO 8601, UTC
   metadata_results: ImageMetadata | null;
-  integrity_results: FindingSet | null;
-  steganography_results: FindingSet | null;
-  watermark_results: FindingSet | null;
   provenance: ProvenanceRecord[];
+  derived_artifacts: DerivedArtifact[];
+  analyses: AnalysisRecord[];
+  timeline: TimelineEvent[];
+}
+
+export interface DerivedArtifact {
+  artifact_id: string;
+  parent_image_id: string;
+  parent_sha256: string;
+  operation: Operation;
+  created_at: string;
+  filename: string;
+  mime_type: string;
+  size: number;
+  sha256: string;
+  width: number;
+  height: number;
+  provenance_record_id: string;
+}
+
+export interface TimelineEvent {
+  event_id: string;
+  timestamp: string;
+  event_type: "evidence_acquired" | "metadata_extracted" | "hash_computed" | "artifact_created" | "analysis_completed";
+  subject_image_id: string;
+  description: string;
+  reference_id: string | null;
 }
 
 export interface CapacityReport {

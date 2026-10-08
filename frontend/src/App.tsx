@@ -5,6 +5,7 @@ import { PLACEHOLDER_PATHS } from "./features/navigation";
 import Comparison from "./pages/Comparison";
 import Dashboard from "./pages/Dashboard";
 import Evidence from "./pages/Evidence";
+import Investigation from "./pages/Investigation";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import Provenance from "./pages/Provenance";
 import Steganalysis from "./pages/Steganalysis";
@@ -18,6 +19,7 @@ export default function App() {
         <Route element={<Layout />}>
           <Route index element={<Dashboard />} />
           <Route path="evidence" element={<Evidence />} />
+          <Route path="investigation" element={<Investigation />} />
           <Route path="provenance" element={<Provenance />} />
           <Route path="steganography" element={<Steganography />} />
           <Route path="steganalysis" element={<Steganalysis />} />

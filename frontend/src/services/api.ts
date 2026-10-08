@@ -1,4 +1,5 @@
-import type { CapacityReport, CompareResult, EvidenceArtifact, OperationResult, StegoExtractResult } from "../types/evidence";
+import type { AnalysisRecord, AnalysisType, WatermarkCheck } from "../types/analysis";
+import type { CapacityReport, EvidenceArtifact, OperationResult, StegoExtractResult } from "../types/evidence";
 import type { CoverComparison, SteganalysisReport } from "../types/steganalysis";
 import type {
   AttackInfo,
@@ -90,5 +91,9 @@ export const runRobustness = (req: { image_id: string; method: WatermarkMethod; 
 export const compareMethods = (req: { evidence_id: string; message: string; key: string; strength?: number }) =>
   post<CompareMethodsResult>("/api/watermark/compare-methods", req);
 
-export const compareImages = (original_id: string, processed_id: string) =>
-  post<CompareResult>("/api/analysis/compare", { original_id, processed_id });
+export const runAnalysis = (
+  evidenceId: string,
+  req: { type: AnalysisType; subject_id?: string; reference_id?: string | null; watermark?: WatermarkCheck },
+) => post<AnalysisRecord>(`/api/investigation/${evidenceId}/analyses`, req);
+export const runPipeline = (evidenceId: string, req: { subject_id?: string; watermark?: WatermarkCheck | null }) =>
+  post<AnalysisRecord[]>(`/api/investigation/${evidenceId}/pipeline`, req);

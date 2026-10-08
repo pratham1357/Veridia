@@ -33,7 +33,7 @@ export function LineChart({
   );
 }
 
-const CHANNEL_COLOR = { red: "#f87171", green: "#4ade80", blue: "#60a5fa" } as const;
+const CHANNEL_COLOR = { red: "#f87171", green: "#4ade80", blue: "#60a5fa", gray: "#cbd5e1" } as const;
 
 export function HistogramChart({ values, channel }: { values: number[]; channel: keyof typeof CHANNEL_COLOR }) {
   const h = 100;
@@ -42,6 +42,20 @@ export function HistogramChart({ values, channel }: { values: number[]; channel:
   return (
     <svg viewBox={`0 0 ${W} ${h}`} preserveAspectRatio="none" className="h-24 w-full rounded bg-slate-950">
       <polygon points={`0,${h} ${pts} ${W},${h}`} fill={CHANNEL_COLOR[channel]} fillOpacity={0.35} stroke={CHANNEL_COLOR[channel]} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
+/** Two histograms of the same channel: reference as an outline, subject filled. */
+export function HistogramOverlay({ reference, subject, channel }: { reference: number[]; subject: number[]; channel: keyof typeof CHANNEL_COLOR }) {
+  const h = 100;
+  const max = Math.max(...reference, ...subject, 1);
+  const line = (values: number[]) => values.map((v, i) => `${((i / 255) * W).toFixed(1)},${(h - (v / max) * h).toFixed(1)}`).join(" ");
+  return (
+    <svg viewBox={`0 0 ${W} ${h}`} preserveAspectRatio="none" className="h-24 w-full rounded bg-slate-950">
+      <polygon points={`0,${h} ${line(subject)} ${W},${h}`} fill={CHANNEL_COLOR[channel]} fillOpacity={0.3} stroke="none" />
+      <polyline points={line(reference)} fill="none" stroke="#e2e8f0" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+      <polyline points={line(subject)} fill="none" stroke={CHANNEL_COLOR[channel]} strokeWidth={1} vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }

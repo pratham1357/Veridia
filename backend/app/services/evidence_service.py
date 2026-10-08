@@ -2,13 +2,13 @@
 
 import re
 import uuid
-from datetime import datetime, timezone
 
 from analysis.core import ImageDecodeError, decode_rgb, probe, sha256_hex
 from analysis.metadata import extract_metadata
 from app.core.config import settings
 from app.schemas.evidence import EvidenceArtifact, EvidenceFileType, ImageMetadata
 from app.services.errors import ServiceError
+from app.services.provenance import now, record_event
 from app.services.store import StoredImage, store
 
 _SIGNATURES = (("PNG", b"\x89PNG\r\n\x1a\n"), ("JPEG", b"\xff\xd8\xff"), ("BMP", b"BM"))
@@ -48,11 +48,14 @@ def ingest(filename: str | None, data: bytes) -> EvidenceArtifact:
         if width * height > settings.max_pixels:
             raise ServiceError(f"Image exceeds the {settings.max_pixels:,} pixel limit.", 413)
         decode_rgb(data)  # full decode: rejects truncated/corrupt files up front
+        acquired_at = now()
         metadata = ImageMetadata.model_validate(extract_metadata(data))
+        metadata_at = now()
     except ImageDecodeError as exc:
         raise ServiceError(str(exc), 400) from exc
 
     digest = sha256_hex(data)
+    hashed_at = now()
     evidence_id = f"ev_{uuid.uuid4().hex}"
     evidence = EvidenceArtifact(
         evidence_id=evidence_id,
@@ -62,9 +65,14 @@ def ingest(filename: str | None, data: bytes) -> EvidenceArtifact:
         sha256=digest,
         width=width,
         height=height,
-        created_at=datetime.now(timezone.utc),
+        created_at=acquired_at,
         metadata_results=metadata,
     )
+    record_event(evidence, "evidence_acquired", evidence_id,
+                 f"Evidence acquired: {safe_name}, {len(data):,} bytes, validated as {fmt} ({width}×{height})", timestamp=acquired_at)
+    record_event(evidence, "metadata_extracted", evidence_id,
+                 f"Metadata extracted: EXIF {metadata.exif.status.value.replace('_', ' ')} ({len(metadata.exif.entries)} entries)", timestamp=metadata_at)
+    record_event(evidence, "hash_computed", evidence_id, f"SHA-256 calculated: {digest}", timestamp=hashed_at)
     original = StoredImage(evidence_id, safe_name, mime, data, digest, width, height, evidence_id)
     store.add_evidence(evidence, original)
     return evidence

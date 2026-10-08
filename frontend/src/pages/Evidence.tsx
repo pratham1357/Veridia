@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { ErrorText, Hash, PageHeader, Panel } from "../components/ui";
 import { useEvidence } from "../features/evidence/EvidenceContext";
 import { formatBytes } from "../features/format";
@@ -60,6 +61,9 @@ export default function Evidence() {
 
       {evidence && meta && (
         <>
+          <p className="mb-4 text-sm text-slate-400">
+            Next: open <Link to="/investigation" className="text-cyan-400 underline">Investigation</Link> to run metadata, integrity, steganalysis and watermark analyses on this evidence.
+          </p>
           <Panel title="Evidence record">
             <div className="flex flex-col gap-6 md:flex-row">
               <img src={imageUrl(evidence.evidence_id)} alt="Evidence preview" className="max-h-64 rounded border border-slate-800 bg-slate-950 object-contain" />

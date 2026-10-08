@@ -8,8 +8,9 @@ import numpy as np
 
 from analysis.core import ImageDecodeError, decode_rgb, encode_png, sha256_hex
 from analysis.metrics import compare_images
-from app.schemas.evidence import ProvenanceRecord, QualityMetrics
+from app.schemas.evidence import DerivedArtifact, ProvenanceRecord, QualityMetrics
 from app.services.errors import ServiceError
+from app.services.provenance import image_label, record_event
 from app.services.store import StoredImage, store
 
 Parameters = dict[str, str | int | float | bool]
@@ -36,7 +37,11 @@ def derive(
     transform: Callable[[np.ndarray], np.ndarray],
     parameters: Parameters,
 ) -> tuple[StoredImage, ProvenanceRecord, np.ndarray, np.ndarray]:
-    """Apply ``transform`` to a stored image, store the PNG result and append a provenance record.
+    """Apply ``transform`` to a stored image and record the result as a derived artifact.
+
+    The input image is never modified. The new artifact gets its own ID and SHA-256,
+    a parent link, a provenance record (operation, parameters, metrics) and a
+    timeline event.
 
     Analysis-layer ``ValueError``s (capacity, invalid message, bad attack parameter)
     become 422 responses. Returns (artifact, record, input pixels, output pixels).
@@ -75,4 +80,29 @@ def derive(
     )
     store.add_artifact(artifact)
     evidence.provenance.append(record)
+    evidence.derived_artifacts.append(
+        DerivedArtifact(
+            artifact_id=artifact.image_id,
+            parent_image_id=source.image_id,
+            parent_sha256=source.sha256,
+            operation=operation,
+            created_at=record.timestamp,
+            filename=artifact.filename,
+            mime_type=artifact.mime_type,
+            size=len(png),
+            sha256=artifact.sha256,
+            width=artifact.width,
+            height=artifact.height,
+            provenance_record_id=record.record_id,
+        )
+    )
+    record_event(
+        evidence,
+        "artifact_created",
+        artifact.image_id,
+        f"Derived artifact created by {operation.replace('_', ' ')} from {image_label(evidence, source.image_id)}: "
+        f"{artifact.filename} (SHA-256 {artifact.sha256[:16]}…)",
+        reference_id=record.record_id,
+        timestamp=record.timestamp,
+    )
     return artifact, record, input_px, output_px

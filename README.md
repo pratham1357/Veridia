@@ -4,7 +4,7 @@
 
 *Veridia: Tracing Truth Through Digital Images*
 
-> **Status: Phase 3, research prototype.** Evidence intake, metadata, LSB steganography, spatial- and DCT-domain watermarking, watermark robustness experiments, statistical LSB steganalysis (chi-square, RS), quality metrics and a provenance record work end to end. Forensic manipulation analysis, persistence and reporting are **not** implemented; see [Planned](#planned).
+> **Status: Phase 4, research prototype.** Evidence intake, metadata, LSB steganography, spatial- and DCT-domain watermarking, robustness experiments, statistical steganalysis, image-integrity analysis and forensic comparison are connected in one investigation workflow with a provenance chain and timeline. Manipulation localisation, persistence and reporting are **not** implemented; see [Planned](#planned).
 
 ---
 
@@ -17,18 +17,19 @@ VERIDIA is a proprietary workbench for investigating and experimenting with digi
 VERIDIA is developed for a **Digital Watermarking & Steganography** course. Watermarking and steganography are its technical core; the provenance and forensics layer exists to support and contextualize them.
 
 ```text
-Digital Watermarking
-        ↓
-Ownership / Authentication / Integrity
-        ↓
-Digital Image Provenance
-
-Steganography
-        ↓
-Information Concealment
-        ↓
-Steganalysis / Forensic Investigation
+DIGITAL WATERMARKING                         STEGANOGRAPHY
+        │                                            │
+        ├── Ownership                                ├── Information hiding
+        ├── Authentication                           └── LSB embedding
+        ├── Integrity                                        │
+        └── Robustness                                       ▼
+                │                                    STEGANALYSIS
+                ▼                                            │
+        IMAGE PROVENANCE  ──────────────▶  FORENSIC INVESTIGATION  ◀──
+                                         (evidence, integrity, comparison, timeline)
 ```
+
+In VERIDIA these meet in one workflow: an evidence image is hashed and recorded; watermarking and steganography create **derived artifacts** linked to it; and the investigation view runs metadata, integrity, steganalysis, watermark verification and comparison on any of those images. For example, the integrity module detects the 8×8 block structure the DCT watermark leaves in a PNG, and the comparison module shows that LSB embedding changes pixels only by ±1.
 
 The algorithms are implemented directly with NumPy rather than by wrapping a steganography or watermarking library. Pillow is used only to decode and encode image files.
 
@@ -60,14 +61,17 @@ Investigating a digital image rarely depends on one technique. An analyst may ne
 - **Robustness testing:** JPEG recompression, resize-and-restore, Gaussian noise, brightness, contrast and border crop; single experiments (stored with provenance) or a full suite, reporting PSNR/SSIM, raw bit error rate and verification status.
 - **Method comparison:** spatial vs. DCT watermark on the same image and message: imperceptibility, verification and the same attack suite, side by side.
 - **Quality metrics:** MSE, PSNR, SSIM between original and processed images.
-- **Comparison:** original vs. processed images with file size, hash, metrics and a difference image.
-- **Provenance record:** each processing step records input/output hashes, time, safe parameters and metrics, held in memory.
-- **Frontend:** Dashboard, Evidence, Steganography, Steganalysis, Watermarking (Spatial / DCT / Compare Methods / Robustness Testing), Comparison and Provenance views.
-- **Tests:** 52 focused backend/analysis tests.
+- **Evidence object and provenance chain:** each evidence item records its identity, metadata, every **derived artifact** (own ID and SHA-256, parent image and parent hash, operation, timestamp), every image-producing operation, every recorded analysis result, and a **timeline** of the operations the application performed.
+- **Common analysis results:** every analyzer returns the same structure (status, measurements, findings, interpretation, limitations, timestamp). Each **finding** states the observation, the measurement supporting it, what it may indicate, and what it does *not* establish.
+- **Image-integrity analysis:** SHA-256 re-verification, format and image characteristics, R/G/B/grayscale statistics and histograms, JPEG quantization tables with IJG quality estimation, chroma subsampling, and an 8×8 blockiness measurement for compression history in lossless files.
+- **Forensic comparison:** reference vs. derived/suspected image with side-by-side view, difference map, MSE/PSNR/SSIM, changed-pixel statistics, histogram overlay and channel statistics.
+- **Investigation workflow:** one view per evidence item that runs metadata → integrity → steganalysis → (watermark verification) → (comparison with the original) on the original or any derived artifact, and shows the findings, the artifact tree and the timeline.
+- **Frontend:** Dashboard, Evidence, Investigation, Steganography, Steganalysis, Watermarking (Spatial / DCT / Compare Methods / Robustness Testing), Comparison and Provenance views.
+- **Tests:** 66 focused backend/analysis tests.
 
 ### Planned
 
-Integrity and manipulation analysis, DWT-domain and geometrically robust watermarking, further steganalysis (e.g. sample-pair analysis, LSB matching), persistence, reporting. See the [Roadmap](#roadmap).
+Manipulation localisation, DWT-domain and geometrically robust watermarking, further steganalysis (e.g. sample-pair analysis, LSB matching), persistence, reporting. See the [Roadmap](#roadmap).
 
 ## Technical Methodology
 
@@ -113,16 +117,39 @@ Example, measured once on a 512×384 synthetic test image (message `VERIDIA`, DC
 
 No "good" or "bad" threshold is claimed; interpretation depends on the application.
 
-### Provenance tracking
-Each processing step is recorded as: input image (the evidence or a derived artifact) and its SHA-256 → operation → output artifact ID and SHA-256, with timestamp, safe parameters (payloads, messages and keys are never recorded) and quality metrics. Attack experiments are recorded on the watermarked image they attacked.
+### Image-integrity analysis
+- **Hash re-verification:** the stored bytes are re-hashed and compared with the SHA-256 recorded on entry. This shows integrity *since acquisition*, not before it.
+- **JPEG compression:** quantization tables are read from the file. Most encoders scale the standard tables (ITU-T T.81 Annex K) with the IJG formula (`scale = 5000 // Q` for Q < 50, `200 − 2Q` otherwise), so VERIDIA estimates quality as the Q whose scaled table is closest. It reproduces Pillow-encoded qualities 1–100 exactly. Non-standard tables (typical of camera firmware) are reported as such, with an approximate estimate.
+- **Blockiness:** the ratio of luminance steps across 8×8 block boundaries to steps inside blocks. It is ≈1.0 without block structure. Measured on synthetic test images: JPEG q95 ≈1.13, q50 ≈2.1, VERIDIA's DCT watermark ≈1.36. In a *lossless* file a ratio above 1.10 is reported as a potential indicator of earlier JPEG or block-DCT processing; the threshold is a heuristic, not a calibrated detector.
+- **Channel statistics:** mean, standard deviation, min and max, plus histograms, for R, G, B and grayscale (BT.601 luma).
+
+No finding from this module claims that compression or statistics prove manipulation.
+
+### Analysis results and findings
+Every analyzer (`analysis/core/base.py`) returns `status`, `measurements`, `findings`, `interpretation`, `limitations` and `timestamp`. Status is one of **Verified** (a definite check succeeded, e.g. a watermark matched), **Indicator detected**, **No indicator detected**, **Inconclusive** or **Not applicable**. Each finding has four parts:
 
 ```text
-Original Image ── SHA-256 ──▶ LSB Steganography ──▶ Output SHA-256 + payload size + quality metrics
-Original Image ── SHA-256 ──▶ Watermark Embedding ──▶ Output SHA-256 + watermark metadata + quality metrics
-                                                         └──▶ Attack (e.g. JPEG q75) ──▶ Output SHA-256 + distortion metrics
+Finding:        Image is JPEG compressed
+Evidence:       2 quantization tables; luminance table matches IJG quality 88 (deviation 0.00)
+Interpretation: The pixel data has been lossy-compressed at least once.
+Limitation:     JPEG compression alone does not establish manipulation.
 ```
 
-Records are held in server memory and lost on restart, and they are not tamper-evident.
+Findings are not combined into an authenticity score. No defensible model for such a score exists in this project.
+
+### Provenance tracking
+Two kinds of images are distinguished:
+- **Original evidence:** the uploaded file. It is stored unmodified, and integrity analysis re-verifies its hash.
+- **Derived artifacts:** images produced by steganographic embedding, watermark embedding or robustness attacks. Each has its own ID and SHA-256, a parent reference (evidence or another artifact) with the parent's hash, the operation and its parameters, a timestamp and quality metrics against the parent.
+
+```text
+Original Evidence (SHA-256)
+   ├── DCT Watermark Embedding ──▶ watermarked.png (SHA-256, strength, PSNR/SSIM)
+   │       └── Attack: JPEG q75 ──▶ watermarked_jpeg_75.png (SHA-256, distortion metrics)
+   └── LSB Steganography ──▶ stego.png (SHA-256, payload size, PSNR/SSIM)
+```
+
+The **timeline** records only operations the application performed: acquisition, metadata extraction, hashing, artifact creation, and each recorded analysis with its result status. Analyses are recorded when run from the Investigation or Comparison views. Exploratory views (e.g. the Steganalysis page) are not recorded. Payloads, watermark messages and keys are never stored in operation records. Records are held in server memory, lost on restart, and not tamper-evident.
 
 ## Planned Capabilities
 
@@ -130,10 +157,10 @@ Records are held in server memory and lost on restart, and they are not tamper-e
 | --- | --- |
 | **Evidence Management** | Persistent storage, preserved read-only originals, an operation log. |
 | **Metadata & Provenance** | Metadata consistency checks and richer origin/history reasoning. |
-| **Image Integrity** | Image statistics, compression-history analysis, manipulation indicators. |
+| **Image Integrity** | Manipulation localisation (e.g. error-level or noise-residual maps), double-JPEG detection. |
 | **Steganography Analysis** | Further detectors (sample-pair analysis, LSB matching / ±1 embedding), calibrated evaluation on real image sets. |
 | **Digital Watermarking** | DWT-domain and geometrically robust watermarking; more attack types. |
-| **Forensic Investigation** | Cross-module correlation and evidence timelines. |
+| **Forensic Investigation** | Multi-evidence cases, persistent and tamper-evident records. |
 | **Reporting** | Reproducible reports of findings, methods, parameters and hashes. |
 
 ## Architecture
@@ -141,14 +168,14 @@ Records are held in server memory and lost on restart, and they are not tamper-e
 ```mermaid
 flowchart TD
     FE["Frontend<br/>React / TypeScript / Vite"] --> API["Backend API<br/>FastAPI routes"]
-    API --> SVC["Service layer<br/>evidence store, orchestration, provenance"]
-    SVC --> AN["Analysis layer (Python / NumPy)"]
+    API --> SVC["Service layer<br/>evidence store, derived artifacts, investigation, timeline"]
+    SVC --> AN["Analysis layer (Python / NumPy)<br/>common AnalysisResult + Finding"]
     AN --> M["metadata"]
+    AN --> I["integrity (hash, JPEG tables, blockiness, comparison)"]
     AN --> S["steganography (LSB, chi-square, RS, histograms)"]
     AN --> W["watermarking (spatial LSB, DCT, attacks, robustness)"]
-    AN --> Q["metrics (MSE, PSNR, SSIM)"]
-    AN -.-> I["integrity (planned)"]
-    AN -.-> P["provenance (planned)"]
+    AN --> Q["metrics (MSE, PSNR, SSIM, channel statistics)"]
+    AN -.-> P["provenance inference (planned)"]
 ```
 
 Route handlers only validate and delegate. Algorithms live in `analysis/` and are usable and testable without the web layer.
@@ -177,20 +204,26 @@ VERIDIA reports **forensic indicators and supporting evidence**, not verdicts. I
 **Phase 2: Core Watermarking & Steganography Pipeline** ✔
 - Evidence intake, hashing, metadata, LSB steganography, LSB analysis, basic watermarking, quality metrics, provenance record
 
-**Phase 3: Transform-Domain Watermarking, Robustness & Steganalysis** ✔ (this release)
+**Phase 3: Transform-Domain Watermarking, Robustness & Steganalysis** ✔
 - DCT-domain watermarking, spatial vs. DCT comparison
 - Attack suite and robustness measurement
 - Channel statistics, histogram/chi-square attack, RS analysis, known-cover comparison
 
-**Phase 4: Further Watermarking & Steganalysis**
+**Phase 4: Forensic & Provenance Integration** ✔ (this release)
+- Evidence object with derived artifacts, provenance chain and timeline
+- Common analysis-result and finding structure
+- Image-integrity analysis (hash re-verification, JPEG tables, blockiness, channel statistics)
+- Forensic comparison and unified investigation workflow
+
+**Phase 5: Further Watermarking & Steganalysis**
 - DWT-domain watermarking; geometric resynchronisation
-- Sample-pair analysis, LSB matching detection, channel correlation
+- Sample-pair analysis, LSB matching detection
 - Evaluation on real image datasets
 
-**Phase 5: Forensic Investigation**
-- Manipulation indicators and compression analysis
-- Advanced provenance and evidence timelines
-- Investigation reports
+**Phase 6: Investigation Reports & Persistence**
+- Reproducible investigation reports from recorded findings
+- Persistent, tamper-evident evidence records
+- Manipulation localisation
 
 ## Limitations
 
@@ -199,6 +232,8 @@ VERIDIA reports **forensic indicators and supporting evidence**, not verdicts. I
 - The DCT watermark has no geometric resynchronisation and a 16-byte capacity. Robustness results are measured on the image at hand and do not generalise automatically.
 - Steganalysis results were validated only on synthetic test images and the tool's own embedder. The chi-square attack assumes random-looking payloads, and RS analysis is experimental. Neither is a calibrated detector.
 - Robustness suites and method comparison run synchronously; on large images they can take several seconds.
+- Integrity findings are descriptive. Blockiness is a heuristic calibrated on synthetic images; JPEG table analysis cannot identify devices or detect double compression.
+- The timeline and analysis records are kept in memory and are not tamper-evident; they document what this session did, not the image's history before upload.
 - Operations are on the decoded 8-bit RGB image: alpha channels are dropped, 16-bit data is reduced, and EXIF orientation is not applied. Outputs are always PNG.
 - All state is in memory and lost on restart.
 - Accuracy of results depends on the lossless handling of the file; do not re-save outputs as JPEG.
@@ -225,7 +260,7 @@ Running from the root keeps the `analysis` package importable. Health check:
 
 ```bash
 curl http://localhost:8000/api/health
-# {"status":"ok","service":"VERIDIA","version":"0.3.0"}
+# {"status":"ok","service":"VERIDIA","version":"0.4.0"}
 ```
 
 Interactive API docs: <http://localhost:8000/docs>.
@@ -242,10 +277,12 @@ npm run build      # type-check and production build
 ### Using the workflow
 
 1. Open the **Evidence** page and upload a PNG, JPEG or BMP.
-2. **Steganography:** enter text, embed, download, then extract.
-3. **Steganalysis:** pick the original or a derived image as the suspected image (optionally with the evidence as known cover) and review the measurements.
-4. **Watermarking:** use the *Spatial Domain* / *DCT Domain* tabs to embed and verify, *Compare Methods* for a side-by-side measurement, and *Robustness Testing* to embed, attack and attempt extraction.
-5. **Comparison / Provenance:** review metrics, difference images, hashes and the processing chain.
+2. **Investigation:** run the full analysis on the original, then again on any derived artifact (optionally with watermark verification). Review the findings, the artifact tree and the timeline.
+3. **Steganography:** enter text, embed, download, then extract.
+4. **Steganalysis:** pick the original or a derived image as the suspected image (optionally with the evidence as known cover) and review the measurements.
+5. **Watermarking:** use the *Spatial Domain* / *DCT Domain* tabs to embed and verify, *Compare Methods* for a side-by-side measurement, and *Robustness Testing* to embed, attack and attempt extraction.
+6. **Comparison:** choose a reference and a derived or suspected image to compare (difference map, metrics, histograms, channel statistics).
+7. **Provenance:** review derived artifacts, operations, recorded analyses and the full timeline.
 
 ### Tests
 
@@ -276,8 +313,12 @@ pytest
 | POST | `/api/watermark/robustness` | Full attack suite |
 | POST | `/api/watermark/compare-methods` | Spatial vs. DCT on the same image |
 | GET | `/api/watermark/dct-map/{id}` | Block-DCT magnitude visualisation |
-| POST | `/api/analysis/compare` | Quality metrics for two images |
+| POST | `/api/analysis/compare` | Quality metrics for two images (not recorded) |
 | GET | `/api/analysis/difference/{a}/{b}` | Difference image |
+| POST | `/api/investigation/{evidence_id}/analyses` | Run and record one analysis (`metadata`, `integrity`, `steganalysis`, `watermark`, `comparison`) |
+| POST | `/api/investigation/{evidence_id}/pipeline` | Run and record the full analysis pipeline on an image |
+
+`GET /api/evidence/{id}` returns the full evidence object: metadata, derived artifacts, operations, recorded analyses and timeline.
 
 ### Project Structure
 
@@ -285,14 +326,15 @@ pytest
 veridia/
 ├── frontend/            React + TypeScript + Vite + Tailwind
 │   └── src/             components, pages, features, services, types
-├── backend/app/         FastAPI: api (routes), core (config), schemas, services (store, orchestration)
+├── backend/app/         FastAPI: api (routes), core (config), schemas, services (store, artifacts, investigation, timeline)
 ├── analysis/            Independent forensic algorithms
-│   ├── core/            Hashing, image decode/encode, Analyzer contract
-│   ├── metadata/        Metadata/EXIF extraction
+│   ├── core/            Hashing, image decode/encode, Analyzer contract, AnalysisResult/Finding
+│   ├── metadata/        Metadata/EXIF extraction and findings
+│   ├── integrity/       Hash re-verification, JPEG tables, blockiness, forensic comparison
 │   ├── steganography/   LSB embed/extract; steganalysis (histogram/chi-square, RS, LSB analysis)
 │   ├── watermarking/    Spatial LSB and DCT watermarks, block DCT, attacks, robustness runner
-│   ├── metrics/         MSE, PSNR, SSIM, difference map
-│   └── integrity/  provenance/   Interfaces only (not implemented)
+│   ├── metrics/         MSE, PSNR, SSIM, difference map/statistics, channel statistics
+│   └── provenance/      Interface only (provenance inference not implemented)
 ├── tests/               pytest suite
 └── docs/                Architecture, security, forensic philosophy
 ```

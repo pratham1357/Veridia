@@ -84,3 +84,20 @@ def difference_map(original: np.ndarray, processed: np.ndarray) -> tuple[np.ndar
     if peak == 0:
         return np.zeros(diff.shape, dtype=np.uint8), 0
     return (diff * (255.0 / peak)).astype(np.uint8), peak
+
+
+def difference_statistics(original: np.ndarray, processed: np.ndarray) -> dict[str, object]:
+    """Pixel-level difference measurements between two RGB images of identical shape."""
+    _check(original, processed)
+    diff = np.abs(original.astype(np.int16) - processed.astype(np.int16))
+    changed = diff.max(axis=2) > 0
+    peak = int(diff.max()) if diff.size else 0
+    return {
+        "total_pixels": int(changed.size),
+        "changed_pixels": int(changed.sum()),
+        "changed_fraction": float(changed.mean()) if changed.size else 0.0,
+        "max_abs_difference": peak,
+        "mean_abs_difference": float(diff.mean()) if diff.size else 0.0,
+        "lsb_only": peak <= 1,
+        "changed_samples_per_channel": {name: int(np.count_nonzero(diff[..., i])) for i, name in enumerate(("red", "green", "blue"))},
+    }

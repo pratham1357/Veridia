@@ -1,3 +1,19 @@
-from app.schemas.evidence import EvidenceArtifact, EvidenceFileType, FindingSet, ProvenanceRecord
+from app.schemas.evidence import (
+    AnalysisRecord,
+    AnalysisResult,
+    DerivedArtifact,
+    EvidenceArtifact,
+    EvidenceFileType,
+    ProvenanceRecord,
+    TimelineEvent,
+)
 
-__all__ = ["EvidenceArtifact", "EvidenceFileType", "FindingSet", "ProvenanceRecord"]
+__all__ = [
+    "AnalysisRecord",
+    "AnalysisResult",
+    "DerivedArtifact",
+    "EvidenceArtifact",
+    "EvidenceFileType",
+    "ProvenanceRecord",
+    "TimelineEvent",
+]

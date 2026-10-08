@@ -1,7 +1,10 @@
 """Evidence model.
 
-Defines the shape of a digital evidence artifact and its provenance chain.
-Result fields are indicators/measurements, never authenticity verdicts
+An ``EvidenceArtifact`` is the investigator's record for one uploaded image:
+its identity and metadata, every derived artifact produced from it (with parent
+links and hashes), every processing operation, every recorded analysis result
+and a chronological timeline of what the application actually did. Analysis
+results are measurements and findings, never authenticity verdicts
 (see docs/forensic-philosophy.md).
 """
 
@@ -15,15 +18,6 @@ from pydantic import BaseModel, Field
 class EvidenceFileType(BaseModel):
     mime_type: str = Field(description="Detected from file signature, not from the client-supplied header.")
     extension: str | None = None
-
-
-class FindingSet(BaseModel):
-    """Container for the output of one analysis module. Structure is defined per module later."""
-
-    analyzer: str
-    analyzer_version: str
-    indicators: list[dict[str, Any]] = Field(default_factory=list)
-    notes: list[str] = Field(default_factory=list)
 
 
 class FieldStatus(str, Enum):
@@ -93,6 +87,70 @@ class ProvenanceRecord(BaseModel):
     metrics: QualityMetrics
 
 
+AnalysisType = Literal["metadata", "integrity", "steganalysis", "watermark", "comparison"]
+AnalysisStatus = Literal["verified", "indicator_detected", "no_indicator", "inconclusive", "not_applicable"]
+
+
+class Finding(BaseModel):
+    finding: str
+    evidence: str = Field(description="The measurement supporting the finding.")
+    interpretation: str = Field(description="What the measurement may indicate.")
+    limitation: str = Field(description="What the finding does NOT establish.")
+    kind: Literal["observation", "indicator", "verification"]
+
+
+class AnalysisResult(BaseModel):
+    """Common result structure returned by every analysis module (mirrors analysis.core.AnalysisResult)."""
+
+    analysis_type: AnalysisType
+    analyzer_version: str
+    status: AnalysisStatus
+    interpretation: str
+    measurements: dict[str, str | int | float | bool | None]
+    findings: list[Finding]
+    limitations: list[str]
+    data: dict[str, Any] = Field(default_factory=dict, description="Structured output for visualisation (histograms, tables).")
+    timestamp: datetime
+
+
+class AnalysisRecord(BaseModel):
+    """An analysis that was run on a specific image, recorded on the evidence."""
+
+    record_id: str
+    subject_image_id: str
+    subject_sha256: str
+    reference_image_id: str | None = None
+    result: AnalysisResult
+
+
+class DerivedArtifact(BaseModel):
+    """An image produced by an operation. Never replaces the original evidence."""
+
+    artifact_id: str
+    parent_image_id: str = Field(description="Evidence or artifact this was derived from.")
+    parent_sha256: str
+    operation: str
+    created_at: datetime
+    filename: str
+    mime_type: str
+    size: int
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    width: int
+    height: int
+    provenance_record_id: str
+
+
+class TimelineEvent(BaseModel):
+    """Something the application actually did, in the order it happened."""
+
+    event_id: str
+    timestamp: datetime
+    event_type: Literal["evidence_acquired", "metadata_extracted", "hash_computed", "artifact_created", "analysis_completed"]
+    subject_image_id: str
+    description: str
+    reference_id: str | None = Field(default=None, description="Related provenance or analysis record.")
+
+
 class EvidenceArtifact(BaseModel):
     evidence_id: str
     original_filename: str = Field(description="Sanitized display name; never used as a storage path.")
@@ -104,7 +162,7 @@ class EvidenceArtifact(BaseModel):
     created_at: datetime = Field(description="Time of intake and analysis (UTC).")
 
     metadata_results: ImageMetadata | None = None
-    integrity_results: FindingSet | None = None
-    steganography_results: FindingSet | None = None
-    watermark_results: FindingSet | None = None
-    provenance: list[ProvenanceRecord] = Field(default_factory=list)
+    provenance: list[ProvenanceRecord] = Field(default_factory=list, description="Image-producing operations.")
+    derived_artifacts: list[DerivedArtifact] = Field(default_factory=list)
+    analyses: list[AnalysisRecord] = Field(default_factory=list)
+    timeline: list[TimelineEvent] = Field(default_factory=list)
