@@ -1,5 +1,7 @@
 /** Mirrors backend/app/schemas/evidence.py and operations.py. Keep in sync. */
 
+export type Operation = "lsb_steganography_embed" | "watermark_embed" | "dct_watermark_embed" | "attack";
+
 export interface FindingSet {
   analyzer: string;
   analyzer_version: string;
@@ -48,9 +50,10 @@ export interface ImageSummary {
 
 export interface ProvenanceRecord {
   record_id: string;
-  operation: "lsb_steganography_embed" | "watermark_embed";
+  operation: Operation;
   timestamp: string;
-  input_evidence_id: string;
+  input_evidence_id: string; // root evidence of the chain
+  input_image_id: string; // image actually processed (evidence or artifact)
   input_sha256: string;
   output_image_id: string;
   output_sha256: string;
@@ -90,20 +93,6 @@ export interface StegoExtractResult {
   found: boolean;
   payload: string | null;
   payload_bytes: number | null;
-  detail: string;
-}
-
-export interface LsbAnalysis {
-  image_id: string;
-  channels: { channel: "red" | "green" | "blue"; ones_ratio: number; transition_ratio: number }[];
-  veridia_lsb_header_found: boolean;
-  note: string;
-}
-
-export interface WatermarkVerifyResult {
-  status: "verified" | "mismatch" | "extracted" | "not_found";
-  message: string | null;
-  bit_agreement: number | null;
   detail: string;
 }
 

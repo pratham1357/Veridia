@@ -2,10 +2,9 @@ import { useEffect, useState } from "react";
 import ImageComparison from "../components/ImageComparison";
 import { ErrorText, inputClass, PageHeader, Panel, RequireEvidence } from "../components/ui";
 import { useEvidence } from "../features/evidence/EvidenceContext";
+import { OUTPUT_LABEL } from "../features/operations";
 import { compareImages } from "../services/api";
 import type { CompareResult } from "../types/evidence";
-
-const OP_LABEL = { lsb_steganography_embed: "Stego image", watermark_embed: "Watermarked image" };
 
 function Workspace({ evidenceId }: { evidenceId: string }) {
   const { evidence } = useEvidence();
@@ -32,13 +31,13 @@ function Workspace({ evidenceId }: { evidenceId: string }) {
         <select value={chosen?.output_image_id} onChange={(e) => setSelected(e.target.value)} className={inputClass}>
           {records.map((r) => (
             <option key={r.record_id} value={r.output_image_id}>
-              {OP_LABEL[r.operation]} · {new Date(r.timestamp).toLocaleTimeString()} · {r.output_sha256.slice(0, 10)}…
+              {OUTPUT_LABEL[r.operation]} · {new Date(r.timestamp).toLocaleTimeString()} · {r.output_sha256.slice(0, 10)}…
             </option>
           ))}
         </select>
         <ErrorText message={error} />
       </Panel>
-      {result && chosen && <ImageComparison original={result.original} processed={result.processed} metrics={result.metrics} processedLabel={OP_LABEL[chosen.operation]} />}
+      {result && chosen && <ImageComparison original={result.original} processed={result.processed} metrics={result.metrics} processedLabel={OUTPUT_LABEL[chosen.operation]} />}
     </>
   );
 }

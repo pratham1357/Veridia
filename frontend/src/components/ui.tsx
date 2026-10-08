@@ -52,3 +52,37 @@ export function RequireEvidence({ children }: { children: (evidenceId: string) =
   }
   return <>{children(evidence.evidence_id)}</>;
 }
+
+export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { id: T; label: string }[]; value: T; onChange: (t: T) => void }) {
+  return (
+    <div className="mb-6 flex flex-wrap gap-1 border-b border-slate-800">
+      {tabs.map((t) => (
+        <button
+          key={t.id}
+          onClick={() => onChange(t.id)}
+          className={`-mb-px border-b-2 px-4 py-2 text-sm ${
+            value === t.id ? "border-cyan-400 text-cyan-300" : "border-transparent text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function Toggle<T extends string>({ options, value, onChange }: { options: { id: T; label: string }[]; value: T; onChange: (v: T) => void }) {
+  return (
+    <div className="flex flex-wrap gap-2 text-xs">
+      {options.map((o) => (
+        <button
+          key={o.id}
+          onClick={() => onChange(o.id)}
+          className={`rounded px-3 py-1 ${value === o.id ? "bg-cyan-500/20 text-cyan-300" : "bg-slate-800 text-slate-400"}`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}

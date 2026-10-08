@@ -66,3 +66,21 @@ def ssim(original: np.ndarray, processed: np.ndarray) -> float:
 
 def compare_images(original: np.ndarray, processed: np.ndarray) -> dict[str, float | None]:
     return {"mse": mse(original, processed), "psnr_db": psnr(original, processed), "ssim": ssim(original, processed)}
+
+
+def difference_map(original: np.ndarray, processed: np.ndarray) -> tuple[np.ndarray, int]:
+    """Visualise where two images differ.
+
+    Returns a grayscale image of the per-pixel maximum absolute channel difference,
+    stretched so the largest difference maps to 255, and that largest difference.
+    The stretch makes +/-1 LSB changes visible; compare magnitudes via the returned
+    maximum, not by brightness.
+    """
+    _check(original, processed)
+    diff = np.abs(original.astype(np.int16) - processed.astype(np.int16))
+    if diff.ndim == 3:
+        diff = diff.max(axis=2)
+    peak = int(diff.max())
+    if peak == 0:
+        return np.zeros(diff.shape, dtype=np.uint8), 0
+    return (diff * (255.0 / peak)).astype(np.uint8), peak

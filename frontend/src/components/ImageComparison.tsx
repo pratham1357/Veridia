@@ -1,6 +1,7 @@
 import { formatBytes, formatPsnr } from "../features/format";
 import { imageUrl } from "../services/api";
 import type { ImageSummary, QualityMetrics } from "../types/evidence";
+import DifferenceImage from "./DifferenceImage";
 import { Hash, Panel } from "./ui";
 
 function ImageCard({ label, image }: { label: string; image: ImageSummary }) {
@@ -33,6 +34,7 @@ export default function ImageComparison({
       <div className="flex flex-col gap-4 md:flex-row">
         <ImageCard label="Original" image={original} />
         <ImageCard label={processedLabel} image={processed} />
+        <DifferenceImage originalId={original.image_id} processedId={processed.image_id} />
       </div>
 
       <table className="mt-5 w-full max-w-2xl text-sm">

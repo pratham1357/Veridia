@@ -33,38 +33,30 @@ Properties and limitations
   the same image is destroyed.
 """
 
-import hashlib
 import zlib
-from dataclasses import dataclass
 
 import numpy as np
+
+from analysis.watermarking.common import WatermarkError, WatermarkVerification, keyed_permutation, status_for
+
+__all__ = ["WatermarkError", "WatermarkVerification", "bit_error_rate", "embed", "parameters", "verify"]
 
 MAGIC = b"VRDW"
 MAX_MESSAGE_BYTES = 64
 BLOCK_BYTES = 4 + 1 + MAX_MESSAGE_BYTES + 4
 BLOCK_BITS = BLOCK_BYTES * 8
 MIN_COPIES = 3
-
-
-class WatermarkError(ValueError):
-    """Invalid watermark input or image."""
-
-
-@dataclass(frozen=True)
-class WatermarkVerification:
-    status: str  # "verified" | "mismatch" | "extracted" | "not_found"
-    message: str | None
-    bit_agreement: float | None  # fraction of LSBs agreeing with the voted block
+_DOMAIN = b"veridia-wm-v1:"
 
 
 def _positions(total: int, key: str) -> np.ndarray:
-    seed = int.from_bytes(hashlib.sha256(b"veridia-wm-v1:" + key.encode("utf-8")).digest()[:8], "big")
-    return np.random.default_rng(seed).permutation(total)
+    return keyed_permutation(total, key, _DOMAIN)
 
 
-def _build_block(message: bytes) -> bytes:
+def _block_bits(message: bytes) -> np.ndarray:
     body = bytes([len(message)]) + message.ljust(MAX_MESSAGE_BYTES, b"\x00")
-    return MAGIC + body + zlib.crc32(body).to_bytes(4, "big")
+    block = MAGIC + body + zlib.crc32(body).to_bytes(4, "big")
+    return np.unpackbits(np.frombuffer(block, dtype=np.uint8))
 
 
 def _parse_block(block: bytes) -> bytes | None:
@@ -76,6 +68,15 @@ def _parse_block(block: bytes) -> bytes | None:
     return body[1 : 1 + body[0]]
 
 
+def parameters(pixels: np.ndarray) -> dict[str, int | float | str]:
+    return {
+        "domain": "spatial (LSB of every RGB sample)",
+        "carriers": int(pixels.size),
+        "payload_bits": BLOCK_BITS,
+        "copies": round(pixels.size / BLOCK_BITS, 2),
+    }
+
+
 def embed(pixels: np.ndarray, message: str, key: str = "") -> np.ndarray:
     """Return a copy of ``pixels`` carrying the watermark. The input is not modified."""
     data = message.encode("utf-8")
@@ -84,7 +85,7 @@ def embed(pixels: np.ndarray, message: str, key: str = "") -> np.ndarray:
     total = pixels.size
     if total < BLOCK_BITS * MIN_COPIES:
         raise WatermarkError("Image is too small to carry the watermark with sufficient redundancy.")
-    bits = np.resize(np.unpackbits(np.frombuffer(_build_block(data), dtype=np.uint8)), total)
+    bits = np.resize(_block_bits(data), total)
     perm = _positions(total, key)
     flat = pixels.reshape(-1).copy()
     flat[perm] = (flat[perm] & 0xFE) | bits
@@ -93,22 +94,28 @@ def embed(pixels: np.ndarray, message: str, key: str = "") -> np.ndarray:
 
 def verify(pixels: np.ndarray, key: str = "", expected: str | None = None) -> WatermarkVerification:
     """Extract the watermark and, if ``expected`` is given, compare against it."""
+    params = parameters(pixels)
     total = pixels.size
     copies = total // BLOCK_BITS
     if copies < MIN_COPIES:
-        return WatermarkVerification("not_found", None, None)
+        return WatermarkVerification("not_found", None, None, params)
     lsbs = (pixels.reshape(-1)[_positions(total, key)] & 1)[: copies * BLOCK_BITS].reshape(copies, BLOCK_BITS)
     voted = (lsbs.sum(axis=0, dtype=np.int64) * 2 > copies).astype(np.uint8)
     message = _parse_block(np.packbits(voted).tobytes())
     if message is None:
-        return WatermarkVerification("not_found", None, None)
+        return WatermarkVerification("not_found", None, None, params)
     agreement = float(np.mean(lsbs == voted))
     try:
         text = message.decode("utf-8")
     except UnicodeDecodeError:
-        return WatermarkVerification("not_found", None, None)
-    if expected is None:
-        status = "extracted"
-    else:
-        status = "verified" if text == expected else "mismatch"
-    return WatermarkVerification(status, text, agreement)
+        return WatermarkVerification("not_found", None, None, params)
+    return WatermarkVerification(status_for(text, expected), text, agreement, params)
+
+
+def bit_error_rate(pixels: np.ndarray, message: str, key: str = "") -> float | None:
+    """Fraction of carrier LSBs that differ from what was embedded (before voting)."""
+    total = pixels.size
+    if total < BLOCK_BITS:
+        return None
+    expected = np.resize(_block_bits(message.encode("utf-8")), total)
+    return float(np.mean((pixels.reshape(-1)[_positions(total, key)] & 1) != expected))

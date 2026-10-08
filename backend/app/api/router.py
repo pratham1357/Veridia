@@ -1,10 +1,11 @@
 from fastapi import APIRouter
 
-from app.api import analysis, evidence, health, steganography, watermark
+from app.api import analysis, evidence, health, steganalysis, steganography, watermark
 
 api_router = APIRouter(prefix="/api")
 api_router.include_router(health.router, tags=["system"])
 api_router.include_router(evidence.router, tags=["evidence"])
 api_router.include_router(steganography.router, tags=["steganography"])
+api_router.include_router(steganalysis.router, tags=["steganalysis"])
 api_router.include_router(watermark.router, tags=["watermarking"])
 api_router.include_router(analysis.router, tags=["analysis"])

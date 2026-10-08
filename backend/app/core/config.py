@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="VERIDIA_", env_file=".env", extra="ignore")
 
     app_name: str = "VERIDIA"
-    version: str = "0.2.0"
+    version: str = "0.3.0"
     cors_origins: list[str] = ["http://localhost:5173"]
 
     max_upload_bytes: int = 10 * 1024 * 1024

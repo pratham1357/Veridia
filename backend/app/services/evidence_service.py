@@ -65,6 +65,6 @@ def ingest(filename: str | None, data: bytes) -> EvidenceArtifact:
         created_at=datetime.now(timezone.utc),
         metadata_results=metadata,
     )
-    original = StoredImage(evidence_id, safe_name, mime, data, digest, width, height)
+    original = StoredImage(evidence_id, safe_name, mime, data, digest, width, height, evidence_id)
     store.add_evidence(evidence, original)
     return evidence

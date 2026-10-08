@@ -15,6 +15,7 @@ class StoredImage:
     sha256: str
     width: int
     height: int
+    evidence_id: str  # root evidence; equals image_id for an original
 
     def summary(self) -> ImageSummary:
         return ImageSummary(

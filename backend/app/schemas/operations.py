@@ -1,6 +1,4 @@
-"""Request/response models for the steganography, watermarking and comparison endpoints."""
-
-from typing import Literal
+"""Request/response models for the steganography and comparison endpoints."""
 
 from pydantic import BaseModel, Field
 
@@ -32,38 +30,6 @@ class StegoExtractResult(BaseModel):
     found: bool
     payload: str | None = None
     payload_bytes: int | None = None
-    detail: str
-
-
-class ChannelLsbStats(BaseModel):
-    channel: Literal["red", "green", "blue"]
-    ones_ratio: float
-    transition_ratio: float
-
-
-class LsbAnalysis(BaseModel):
-    image_id: str
-    channels: list[ChannelLsbStats]
-    veridia_lsb_header_found: bool
-    note: str
-
-
-class WatermarkEmbedRequest(BaseModel):
-    evidence_id: str
-    message: str = Field(min_length=1, max_length=64)
-    key: str = Field(default="", max_length=256)
-
-
-class WatermarkVerifyRequest(BaseModel):
-    source_id: str
-    key: str = Field(default="", max_length=256)
-    expected_message: str | None = Field(default=None, max_length=64)
-
-
-class WatermarkVerifyResult(BaseModel):
-    status: Literal["verified", "mismatch", "extracted", "not_found"]
-    message: str | None = None
-    bit_agreement: float | None = None
     detail: str
 
 

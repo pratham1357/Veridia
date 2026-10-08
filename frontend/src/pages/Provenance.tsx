@@ -1,8 +1,7 @@
 import { Hash, PageHeader, Panel, RequireEvidence } from "../components/ui";
 import { useEvidence } from "../features/evidence/EvidenceContext";
+import { OPERATION_LABEL } from "../features/operations";
 import { formatPsnr } from "../features/format";
-
-const OP_LABEL = { lsb_steganography_embed: "LSB steganography embed", watermark_embed: "Watermark embed" };
 
 function Chain() {
   const { evidence } = useEvidence();
@@ -15,10 +14,12 @@ function Chain() {
       </Panel>
       {evidence.provenance.length === 0 && <p className="text-sm text-slate-400">No processing steps recorded yet.</p>}
       {evidence.provenance.map((r) => (
-        <Panel key={r.record_id} title={`↓ ${OP_LABEL[r.operation]}`}>
+        <Panel key={r.record_id} title={`↓ ${OPERATION_LABEL[r.operation]}`}>
           <dl className="space-y-1 text-xs text-slate-400">
             <div>Time: {new Date(r.timestamp).toLocaleString()}</div>
+            <div>Input: <span className="font-mono">{r.input_image_id === r.input_evidence_id ? "original evidence" : r.input_image_id}</span></div>
             <div>Input SHA-256: <Hash value={r.input_sha256} /></div>
+            <div>Output: <span className="font-mono">{r.output_image_id}</span></div>
             <div>Output SHA-256: <Hash value={r.output_sha256} /></div>
             <div>Parameters: <span className="font-mono">{JSON.stringify(r.parameters)}</span></div>
             <div>MSE {r.metrics.mse.toFixed(6)} · PSNR {formatPsnr(r.metrics.psnr_db)} · SSIM {r.metrics.ssim.toFixed(6)}</div>
@@ -33,7 +34,7 @@ function Chain() {
 export default function Provenance() {
   return (
     <section>
-      <PageHeader title="Provenance" subtitle="Processing chain for the active evidence: every derived image is linked to its source by SHA-256" />
+      <PageHeader title="Provenance" subtitle="Processing steps for the active evidence, in order. Each derived image is linked to its input by SHA-256." />
       <RequireEvidence>{() => <Chain />}</RequireEvidence>
     </section>
   );

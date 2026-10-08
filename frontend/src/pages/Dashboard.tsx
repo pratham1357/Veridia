@@ -7,8 +7,10 @@ import type { EvidenceArtifact } from "../types/evidence";
 
 const MODULES: { name: string; path: string; implemented: boolean; note: string }[] = [
   { name: "Evidence intake & hashing", path: "/evidence", implemented: true, note: "Validation, SHA-256, metadata" },
-  { name: "LSB steganography", path: "/steganography", implemented: true, note: "Embed, extract, LSB-plane inspection" },
-  { name: "Digital watermarking", path: "/watermarking", implemented: true, note: "Keyed spatial-domain watermark" },
+  { name: "LSB steganography", path: "/steganography", implemented: true, note: "Embed, extract, capacity" },
+  { name: "Steganalysis", path: "/steganalysis", implemented: true, note: "Channel stats, histograms, chi-square, RS" },
+  { name: "Digital watermarking", path: "/watermarking", implemented: true, note: "Spatial (LSB) and DCT-domain" },
+  { name: "Robustness testing", path: "/watermarking", implemented: true, note: "JPEG, resize, noise, brightness, contrast, crop" },
   { name: "Comparison & metrics", path: "/comparison", implemented: true, note: "MSE, PSNR, SSIM" },
   { name: "Provenance record", path: "/provenance", implemented: true, note: "Hash chain of processing steps" },
   { name: "Integrity / manipulation analysis", path: "/integrity", implemented: false, note: "Planned" },
@@ -30,7 +32,7 @@ export default function Dashboard() {
     <section>
       <PageHeader title="VERIDIA" subtitle="Veridia: Tracing Truth Through Digital Images" />
       <p className="-mt-3 mb-6 max-w-2xl text-sm text-slate-400">
-        A workbench that applies digital watermarking and steganography techniques to digital images, with evidence hashing and a provenance record of every processing step.
+        A workbench that applies spatial- and transform-domain watermarking, LSB steganography and statistical steganalysis to digital images, with measured imperceptibility and robustness, evidence hashing and a provenance record of every processing step.
       </p>
 
       <Panel title="System">

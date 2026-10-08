@@ -1,21 +1,14 @@
 from analysis.core import AnalysisResult, Analyzer, EvidenceInput, decode_rgb
-from analysis.steganography import lsb_analysis
+from analysis.steganography import steganalysis
 
 
 class SteganographyAnalyzer(Analyzer):
-    """Reports LSB-plane characteristics. Statistical steganalysis is not implemented yet."""
+    """LSB steganalysis: channel statistics, chi-square attack and RS analysis."""
 
     name = "steganography"
-    version = "0.1.0"
+    version = "0.2.0"
 
     def analyze(self, evidence: EvidenceInput) -> AnalysisResult:
-        pixels = decode_rgb(evidence.path.read_bytes())
-        return AnalysisResult(
-            self.name,
-            self.version,
-            indicators=[
-                {"channels": lsb_analysis.channel_statistics(pixels)},
-                {"veridia_lsb_header_found": lsb_analysis.has_veridia_header(pixels)},
-            ],
-            notes=["LSB characteristics are descriptive measurements, not proof of hidden data."],
-        )
+        result = steganalysis.report(decode_rgb(evidence.path.read_bytes()))
+        notes = [*result.pop("indicators"), result.pop("disclaimer")]
+        return AnalysisResult(self.name, self.version, indicators=[result], notes=notes)

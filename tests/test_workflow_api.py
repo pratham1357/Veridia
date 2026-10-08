@@ -27,8 +27,8 @@ def test_stego_workflow(client, png_bytes):
     clean = client.post("/api/steganography/extract", json={"source_id": ev["evidence_id"]}).json()
     assert clean["found"] is False
 
-    assert client.get(f"/api/steganography/analyze/{art['image_id']}").json()["veridia_lsb_header_found"] is True
-    assert client.get(f"/api/steganography/lsb-plane/{art['image_id']}/red").headers["content-type"] == "image/png"
+    assert client.get(f"/api/steganalysis/report/{art['image_id']}").json()["veridia_lsb_header_found"] is True
+    assert client.get(f"/api/steganalysis/lsb-plane/{art['image_id']}/red").headers["content-type"] == "image/png"
 
     cmp = client.post("/api/analysis/compare", json={"original_id": ev["evidence_id"], "processed_id": art["image_id"]}).json()
     assert cmp["hashes_differ"] and cmp["metrics"]["mse"] > 0

@@ -1,11 +1,7 @@
-from typing import Literal
-
 from fastapi import APIRouter
-from fastapi.responses import Response
 
 from app.schemas.operations import (
     CapacityReport,
-    LsbAnalysis,
     OperationResult,
     StegoEmbedRequest,
     StegoExtractRequest,
@@ -29,13 +25,3 @@ def embed(req: StegoEmbedRequest) -> OperationResult:
 @router.post("/extract", response_model=StegoExtractResult)
 def extract(req: StegoExtractRequest) -> StegoExtractResult:
     return operations.extract_stego(req.source_id)
-
-
-@router.get("/analyze/{image_id}", response_model=LsbAnalysis)
-def analyze(image_id: str) -> LsbAnalysis:
-    return operations.analyze_lsb(image_id)
-
-
-@router.get("/lsb-plane/{image_id}/{channel}")
-def lsb_plane(image_id: str, channel: Literal["red", "green", "blue"]) -> Response:
-    return Response(content=operations.lsb_plane_png(image_id, channel), media_type="image/png")

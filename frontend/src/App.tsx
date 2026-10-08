@@ -7,6 +7,7 @@ import Dashboard from "./pages/Dashboard";
 import Evidence from "./pages/Evidence";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import Provenance from "./pages/Provenance";
+import Steganalysis from "./pages/Steganalysis";
 import Steganography from "./pages/Steganography";
 import Watermarking from "./pages/Watermarking";
 
@@ -19,6 +20,7 @@ export default function App() {
           <Route path="evidence" element={<Evidence />} />
           <Route path="provenance" element={<Provenance />} />
           <Route path="steganography" element={<Steganography />} />
+          <Route path="steganalysis" element={<Steganalysis />} />
           <Route path="watermarking" element={<Watermarking />} />
           <Route path="comparison" element={<Comparison />} />
           {PLACEHOLDER_PATHS.map((p) => (

@@ -44,3 +44,25 @@ def has_veridia_header(pixels: np.ndarray) -> bool:
     except lsb.NoPayloadError:
         return False
     return True
+
+
+def compare_with_cover(cover: np.ndarray, suspect: np.ndarray) -> dict[str, object]:
+    """Direct differences between a known cover image and a suspected stego image.
+
+    With the true cover available, changes are measured, not inferred. Sample
+    indices refer to the row-major RGB order used by the LSB embedder.
+    """
+    if cover.shape != suspect.shape:
+        raise ValueError(f"Image shapes differ: {cover.shape} vs {suspect.shape}")
+    diff = suspect.astype(np.int16) - cover.astype(np.int16)
+    changed = np.flatnonzero(diff.reshape(-1))
+    return {
+        "total_samples": int(diff.size),
+        "changed_samples": int(changed.size),
+        "changed_fraction": float(changed.size / diff.size),
+        "max_abs_difference": int(np.abs(diff).max()) if diff.size else 0,
+        "lsb_only": bool(np.abs(diff).max() <= 1) if diff.size else True,
+        "changed_per_channel": {name: int(np.count_nonzero(diff[..., i])) for i, name in enumerate(CHANNELS)},
+        "first_changed_index": int(changed[0]) if changed.size else None,
+        "last_changed_index": int(changed[-1]) if changed.size else None,
+    }

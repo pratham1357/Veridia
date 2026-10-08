@@ -1,45 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import ImageComparison from "../components/ImageComparison";
 import { Button, ErrorText, inputClass, PageHeader, Panel, RequireEvidence } from "../components/ui";
 import { useEvidence } from "../features/evidence/EvidenceContext";
 import { evidenceSummary } from "../features/evidence/summary";
-import { analyzeLsb, embedStego, extractStego, getCapacity, imageUrl, lsbPlaneUrl } from "../services/api";
-import type { CapacityReport, LsbAnalysis, OperationResult, StegoExtractResult } from "../types/evidence";
-
-function Inspector({ imageId }: { imageId: string }) {
-  const [analysis, setAnalysis] = useState<LsbAnalysis | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setAnalysis(null);
-    analyzeLsb(imageId).then(setAnalysis).catch((e) => setError(e.message));
-  }, [imageId]);
-
-  return (
-    <>
-      <ErrorText message={error} />
-      {analysis && (
-        <>
-          <div className="grid gap-4 sm:grid-cols-3">
-            {analysis.channels.map((c) => (
-              <div key={c.channel}>
-                <div className="mb-1 text-xs capitalize text-slate-400">{c.channel} LSB plane</div>
-                <img src={lsbPlaneUrl(imageId, c.channel)} alt={`${c.channel} LSB plane`} style={{ imageRendering: "pixelated" }} className="w-full rounded border border-slate-800 bg-black" />
-                <div className="mt-1 font-mono text-xs text-slate-400">ones {c.ones_ratio.toFixed(4)} · transitions {c.transition_ratio.toFixed(4)}</div>
-              </div>
-            ))}
-          </div>
-          <p className="mt-3 text-sm text-slate-300">
-            VERIDIA LSB header at start of stream: <strong>{analysis.veridia_lsb_header_found ? "present" : "not present"}</strong>
-          </p>
-          <p className="mt-1 text-xs text-slate-500">
-            ones = fraction of LSBs equal to 1; transitions = fraction of horizontally adjacent LSBs that differ (≈0.5 for random bits). {analysis.note}
-          </p>
-        </>
-      )}
-    </>
-  );
-}
+import { embedStego, extractStego, getCapacity, imageUrl } from "../services/api";
+import type { CapacityReport, OperationResult, StegoExtractResult } from "../types/evidence";
 
 function Workspace({ evidenceId }: { evidenceId: string }) {
   const { evidence, refresh } = useEvidence();
@@ -47,13 +13,11 @@ function Workspace({ evidenceId }: { evidenceId: string }) {
   const [capacity, setCapacity] = useState<CapacityReport | null>(null);
   const [result, setResult] = useState<OperationResult | null>(null);
   const [extracted, setExtracted] = useState<StegoExtractResult | null>(null);
-  const [inspect, setInspect] = useState<"original" | "stego">("original");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setResult(null);
     setExtracted(null);
-    setInspect("original");
     getCapacity(evidenceId).then(setCapacity).catch((e) => setError(e.message));
   }, [evidenceId]);
 
@@ -75,7 +39,6 @@ function Workspace({ evidenceId }: { evidenceId: string }) {
     run(() => embedStego(evidenceId, payload), (r) => {
       setResult(r);
       setExtracted(null);
-      setInspect("stego");
       void refresh();
     });
 
@@ -115,12 +78,12 @@ function Workspace({ evidenceId }: { evidenceId: string }) {
         </>
       )}
 
-      <Panel title="LSB analysis">
-        <div className="mb-3 flex gap-2 text-xs">
-          <button onClick={() => setInspect("original")} className={`rounded px-3 py-1 ${inspect === "original" ? "bg-cyan-500/20 text-cyan-300" : "bg-slate-800 text-slate-400"}`}>Original</button>
-          {result && <button onClick={() => setInspect("stego")} className={`rounded px-3 py-1 ${inspect === "stego" ? "bg-cyan-500/20 text-cyan-300" : "bg-slate-800 text-slate-400"}`}>Stego</button>}
-        </div>
-        <Inspector imageId={inspect === "stego" && result ? result.artifact.image_id : evidenceId} />
+      <Panel title="Steganalysis">
+        <p className="text-sm text-slate-400">
+          LSB planes, channel statistics, histograms, chi-square and RS analysis are on the{" "}
+          <Link to="/steganalysis" className="text-cyan-400 underline">Steganalysis</Link> page. Select the generated stego image there as the suspected image
+          to see how embedding changes the measurements.
+        </p>
       </Panel>
     </>
   );
@@ -129,7 +92,7 @@ function Workspace({ evidenceId }: { evidenceId: string }) {
 export default function Steganography() {
   return (
     <section>
-      <PageHeader title="Steganography" subtitle="LSB embedding, extraction and LSB-plane inspection" />
+      <PageHeader title="Steganography" subtitle="LSB embedding and extraction" />
       <RequireEvidence>{(id) => <Workspace evidenceId={id} />}</RequireEvidence>
     </section>
   );
