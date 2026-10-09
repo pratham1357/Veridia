@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 import stat
 
 import pytest
@@ -32,11 +33,12 @@ def test_layout_and_permissions(client, natural_png, storage):
 
     assert original.read_bytes() == natural_png  # stored unmodified
     assert hashlib.sha256(derived.read_bytes()).hexdigest() == art["sha256"]
-    assert _mode(original) == 0o400 and _mode(derived) == 0o400  # write-once, read-only
-    assert _mode(root / "evidence.json") == 0o600 and _mode(root) == 0o700
+    if os.name != "nt":  # Windows has only a read-only flag, not POSIX modes
+        assert _mode(original) == 0o400 and _mode(derived) == 0o400  # write-once, read-only
+        assert _mode(root / "evidence.json") == 0o600 and _mode(root) == 0o700
     assert not list(root.rglob("*.tmp"))  # atomic replace leaves no temp files
 
-    record = json.loads((root / "evidence.json").read_text())
+    record = json.loads((root / "evidence.json").read_text(encoding="utf-8"))
     assert record["evidence_id"] == ev["evidence_id"]
     assert len(record["derived_artifacts"]) == 1 and len(record["analyses"]) == 4  # metadata, integrity, steganalysis, comparison
     assert record["timeline"][-1]["hash"] == client.get(f"/api/evidence/{ev['evidence_id']}").json()["timeline"][-1]["hash"]
@@ -66,7 +68,7 @@ def test_damaged_record_is_skipped_and_reported(client, natural_png, png_bytes, 
     good = upload(client, natural_png)
     bad = upload(client, png_bytes, "other.png")
     (storage / "evidence" / bad["evidence_id"] / "evidence.json").chmod(0o600)
-    (storage / "evidence" / bad["evidence_id"] / "evidence.json").write_text("{not json")
+    (storage / "evidence" / bad["evidence_id"] / "evidence.json").write_text("{not json", encoding="utf-8")
     (storage / "evidence" / "not-an-id").mkdir()  # foreign entries are ignored
     (storage / "evidence" / "ev_../").mkdir(exist_ok=True)
 
@@ -79,6 +81,7 @@ def test_damaged_record_is_skipped_and_reported(client, natural_png, png_bytes, 
 def test_missing_image_file_is_reported_not_hidden(client, natural_png, storage):
     ev, art = _populate(client, natural_png)
     path = storage / "evidence" / ev["evidence_id"] / "images" / f"{art['image_id']}.png"
+    os.chmod(path, 0o600)  # stored images are read-only; Windows refuses to delete read-only files
     path.unlink()
     store.open(storage)
     assert client.get(f"/api/images/{art['image_id']}").status_code == 410

@@ -88,9 +88,9 @@ def _verify(client, eid, **params):
 
 def _edit_record(storage, eid, change):
     path = storage / "evidence" / eid / "evidence.json"
-    record = json.loads(path.read_text())
+    record = json.loads(path.read_text(encoding="utf-8"))
     change(record)
-    path.write_text(json.dumps(record))
+    path.write_text(json.dumps(record), encoding="utf-8")
     store.open(storage)
 
 

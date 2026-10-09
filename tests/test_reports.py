@@ -104,9 +104,9 @@ def test_tampered_report_file_is_detected(client, natural_png, storage):
     rec = client.post(f"/api/reports/{eid}").json()
     path = storage / "evidence" / eid / "reports" / f"{rec['report_id']}.json"
     path.chmod(0o600)
-    report = json.loads(path.read_text())
+    report = json.loads(path.read_text(encoding="utf-8"))
     report["analyses"][0]["result"]["status"] = "verified"
-    path.write_text(json.dumps(report))
+    path.write_text(json.dumps(report), encoding="utf-8")
     issues = client.get(f"/api/provenance/{eid}/verify").json()["issues"]
     assert [(i["kind"], i["record_id"]) for i in issues] == [("file_mismatch", f"{rec['report_id']}.json")]
 
@@ -114,9 +114,9 @@ def test_tampered_report_file_is_detected(client, natural_png, storage):
 def test_report_on_tampered_record_says_so(client, natural_png, storage):
     eid, _ = _investigate(client, natural_png)
     path = storage / "evidence" / eid / "evidence.json"
-    record = json.loads(path.read_text())
+    record = json.loads(path.read_text(encoding="utf-8"))
     record["analyses"][0]["result"]["interpretation"] = "rewritten"
-    path.write_text(json.dumps(record))
+    path.write_text(json.dumps(record), encoding="utf-8")
     store.open(storage)
 
     rec = client.post(f"/api/reports/{eid}").json()
