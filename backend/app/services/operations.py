@@ -5,6 +5,7 @@ them, and stores derived artifacts with provenance (via ``artifacts.derive``).
 """
 
 from analysis.core import encode_png
+from analysis.integrity.ela import ela_map
 from analysis.metrics import compare_images, difference_map
 from analysis.steganography import lsb
 from app.schemas.evidence import QualityMetrics
@@ -60,4 +61,9 @@ def compare(original_id: str, processed_id: str) -> CompareResult:
 
 def difference_png(original_id: str, processed_id: str) -> tuple[bytes, int]:
     image, peak = difference_map(*load_pair(original_id, processed_id))
+    return encode_png(image), peak
+
+
+def ela_png(image_id: str, quality: int) -> tuple[bytes, int]:
+    image, peak = ela_map(load_pixels(image_id), quality)
     return encode_png(image), peak

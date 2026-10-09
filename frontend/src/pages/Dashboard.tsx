@@ -14,9 +14,11 @@ const MODULES: { name: string; path: string; implemented: boolean; note: string 
   { name: "Digital watermarking", path: "/watermarking", implemented: true, note: "Spatial (LSB) and DCT-domain" },
   { name: "Robustness testing", path: "/watermarking", implemented: true, note: "JPEG, resize, noise, brightness, contrast, crop" },
   { name: "Forensic comparison", path: "/comparison", implemented: true, note: "Difference map, MSE/PSNR/SSIM, histograms" },
-  { name: "Provenance & timeline", path: "/provenance", implemented: true, note: "Derived artifacts, operations, analyses" },
-  { name: "Manipulation localisation", path: "/investigation", implemented: false, note: "Planned" },
-  { name: "Reporting", path: "/reports", implemented: false, note: "Planned" },
+  { name: "Error level analysis", path: "/investigation", implemented: true, note: "Experimental: block-level JPEG recompression error" },
+  { name: "Provenance & timeline", path: "/provenance", implemented: true, note: "Provenance graph, SHA-256 hash-chained timeline" },
+  { name: "Tamper verification", path: "/provenance", implemented: true, note: "Chain, record, lineage and file-hash checks" },
+  { name: "Reporting", path: "/reports", implemented: true, note: "HTML + JSON investigation reports" },
+  { name: "Persistent storage", path: "/evidence", implemented: true, note: "JSON records + image files under storage/" },
 ];
 
 export default function Dashboard() {
@@ -34,16 +36,22 @@ export default function Dashboard() {
     <section>
       <PageHeader title="VERIDIA" subtitle="Veridia: Tracing Truth Through Digital Images" />
       <p className="-mt-3 mb-6 max-w-2xl text-sm text-slate-400">
-        A workbench that applies spatial- and transform-domain watermarking, LSB steganography and statistical steganalysis to digital images, with measured imperceptibility and robustness, evidence hashing and a provenance record of every processing step.
+        A workbench that applies spatial- and transform-domain watermarking, LSB steganography and statistical steganalysis to digital images, with measured imperceptibility and robustness, evidence hashing, a tamper-evident provenance record of every processing step and exportable investigation reports.
       </p>
 
       <Panel title="System">
         <div className={`text-sm ${health ? "text-emerald-400" : error ? "text-red-400" : "text-slate-400"}`}>
           {health ? `Backend online · ${health.service} v${health.version}` : error ? "Backend unreachable" : "Checking…"}
         </div>
+        {health && (
+          <div className="mt-1 text-xs text-slate-400">
+            {health.storage === "persistent" ? "Persistent storage" : "Memory-only storage (VERIDIA_PERSIST=false)"} · {health.evidence_count} evidence item(s)
+            {health.storage_load_errors > 0 && <span className="text-amber-300"> · {health.storage_load_errors} stored record(s) could not be loaded (see server log)</span>}
+          </div>
+        )}
       </Panel>
 
-      <Panel title="Evidence this session">
+      <Panel title="Evidence">
         {recent.length === 0 ? (
           <p className="text-sm text-slate-400">None yet. <Link to="/evidence" className="text-cyan-400 underline">Upload an image</Link>.</p>
         ) : (
@@ -60,7 +68,11 @@ export default function Dashboard() {
             ))}
           </ul>
         )}
-        <p className="mt-3 text-xs text-slate-500">Evidence is held in server memory and is cleared when the backend restarts.</p>
+        <p className="mt-3 text-xs text-slate-500">
+          {health?.storage === "memory"
+            ? "Evidence is held in server memory and is cleared when the backend restarts."
+            : "Evidence records and image files are stored under storage/ and reloaded when the backend restarts."}
+        </p>
       </Panel>
 
       <Panel title="Analysis modules">

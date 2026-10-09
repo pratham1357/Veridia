@@ -1,6 +1,6 @@
 /** Mirrors the common analysis-result structure (backend/app/schemas/evidence.py). Keep in sync. */
 
-export type AnalysisType = "metadata" | "integrity" | "steganalysis" | "watermark" | "comparison";
+export type AnalysisType = "metadata" | "integrity" | "ela" | "steganalysis" | "watermark" | "comparison";
 export type AnalysisStatus = "verified" | "indicator_detected" | "no_indicator" | "inconclusive" | "not_applicable";
 export type Measurement = string | number | boolean | null;
 
@@ -53,6 +53,28 @@ export interface ComparisonData {
   difference: { changed_samples_per_channel: Record<"red" | "green" | "blue", number> };
   reference: { channels: ChannelStat[]; histograms: Histograms };
   subject: { channels: ChannelStat[]; histograms: Histograms };
+}
+
+export interface ELACluster {
+  blocks: number;
+  row: number;
+  col: number;
+  rows: number;
+  cols: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface ELAData {
+  block_size: number;
+  quality: number;
+  width: number;
+  height: number;
+  clusters: ELACluster[];
+  block_means: number[][];
+  block_z: number[][];
 }
 
 export interface WatermarkCheck {

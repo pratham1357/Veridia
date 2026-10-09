@@ -1,7 +1,8 @@
 /** Mirrors backend/app/schemas/evidence.py and operations.py. Keep in sync. */
 import type { AnalysisRecord } from "./analysis";
 
-export type Operation = "lsb_steganography_embed" | "watermark_embed" | "dct_watermark_embed" | "attack";
+/** Operation names are open-ended identifiers registered by the backend (GET /api/provenance/operations). */
+export type Operation = string;
 
 export type FieldStatus = "available" | "not_available" | "unknown";
 
@@ -68,6 +69,7 @@ export interface EvidenceArtifact {
   provenance: ProvenanceRecord[];
   derived_artifacts: DerivedArtifact[];
   analyses: AnalysisRecord[];
+  reports: ReportRecord[];
   timeline: TimelineEvent[];
 }
 
@@ -86,13 +88,38 @@ export interface DerivedArtifact {
   provenance_record_id: string;
 }
 
+export type EventType =
+  | "evidence_acquired"
+  | "metadata_extracted"
+  | "hash_computed"
+  | "artifact_created"
+  | "analysis_completed"
+  | "report_exported";
+
+/** One link of the timeline's SHA-256 hash chain. */
 export interface TimelineEvent {
+  sequence: number;
   event_id: string;
   timestamp: string;
-  event_type: "evidence_acquired" | "metadata_extracted" | "hash_computed" | "artifact_created" | "analysis_completed";
+  event_type: EventType;
   subject_image_id: string;
   description: string;
   reference_id: string | null;
+  content_hash: string | null; // hash of the record the event covers
+  previous_hash: string; // hash of the preceding event (64 zeros for the first)
+  hash: string;
+}
+
+export interface ReportRecord {
+  report_id: string;
+  created_at: string;
+  events_covered: number;
+  chain_head: string;
+  chain_valid: boolean;
+  json_sha256: string;
+  json_size: number;
+  html_sha256: string;
+  html_size: number;
 }
 
 export interface CapacityReport {

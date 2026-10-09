@@ -4,7 +4,7 @@
 
 *Veridia: Tracing Truth Through Digital Images*
 
-> **Status: Phase 4, research prototype.** Evidence intake, metadata, LSB steganography, spatial- and DCT-domain watermarking, robustness experiments, statistical steganalysis, image-integrity analysis and forensic comparison are connected in one investigation workflow with a provenance chain and timeline. Manipulation localisation, persistence and reporting are **not** implemented; see [Planned](#planned).
+> **Status: Phase 5, research prototype.** Evidence intake, metadata, LSB steganography, spatial- and DCT-domain watermarking, robustness experiments, statistical steganalysis, image-integrity analysis, experimental error level analysis and forensic comparison are connected in one investigation workflow. Evidence is persisted under `storage/`, the provenance timeline is a SHA-256 hash chain with tamper verification, and investigations export as HTML and JSON reports. See [Planned](#planned) for what is not implemented.
 
 ---
 
@@ -65,13 +65,19 @@ Investigating a digital image rarely depends on one technique. An analyst may ne
 - **Common analysis results:** every analyzer returns the same structure (status, measurements, findings, interpretation, limitations, timestamp). Each **finding** states the observation, the measurement supporting it, what it may indicate, and what it does *not* establish.
 - **Image-integrity analysis:** SHA-256 re-verification, format and image characteristics, R/G/B/grayscale statistics and histograms, JPEG quantization tables with IJG quality estimation, chroma subsampling, and an 8×8 blockiness measurement for compression history in lossless files.
 - **Forensic comparison:** reference vs. derived/suspected image with side-by-side view, difference map, MSE/PSNR/SSIM, changed-pixel statistics, histogram overlay and channel statistics.
-- **Investigation workflow:** one view per evidence item that runs metadata → integrity → steganalysis → (watermark verification) → (comparison with the original) on the original or any derived artifact, and shows the findings, the artifact tree and the timeline.
-- **Frontend:** Dashboard, Evidence, Investigation, Steganography, Steganalysis, Watermarking (Spatial / DCT / Compare Methods / Robustness Testing), Comparison and Provenance views.
-- **Tests:** 66 focused backend/analysis tests.
+- **Error level analysis (experimental):** JPEG recompression error per pixel, block statistics with robust z-scores, connected outlier clusters, an error-level map and a block-score overlay. Reported as a potential indicator only.
+- **Investigation workflow:** one view per evidence item that runs metadata → integrity → (ELA) → steganalysis → (watermark verification) → (comparison with the original) on the original or any derived artifact, and shows the findings, the artifact tree and the timeline.
+- **Persistence:** every evidence item is stored under `storage/evidence/<id>/` as `evidence.json` plus write-once, read-only image and report files, and reloaded on restart. No database.
+- **Hash-chained timeline:** each timeline event carries its sequence number, the previous event's hash, the hash of the record it covers and its own SHA-256 over canonical JSON.
+- **Tamper verification:** re-derives the chain, every covered record, artifact lineage and the hash of every stored file, optionally against a head hash recorded elsewhere, and reports exactly which event, record or file is inconsistent.
+- **Investigation reports:** one click exports a machine-readable JSON report and a self-contained, printable HTML rendering (inline thumbnails and SVG, no scripts); both are hashed, stored and anchored in the chain.
+- **Extensible provenance operations:** operation names are registered identifiers with labels and categories (`GET /api/provenance/operations`) rather than a closed enum, so new operations need no schema or frontend change.
+- **Frontend:** Dashboard, Evidence, Investigation, Steganography, Steganalysis, Watermarking (Spatial / DCT / Compare Methods / Robustness Testing), Comparison, Provenance (SVG provenance graph, hash-chained timeline, verification) and Reports views.
+- **Tests:** 108 focused backend/analysis tests, including persistence round trips, tamper scenarios, ELA on synthetic splices and report escaping.
 
 ### Planned
 
-Manipulation localisation, DWT-domain and geometrically robust watermarking, further steganalysis (e.g. sample-pair analysis, LSB matching), persistence, reporting. See the [Roadmap](#roadmap).
+Calibrated manipulation localisation (ELA is experimental), DWT-domain and geometrically robust watermarking, further steganalysis (e.g. sample-pair analysis, LSB matching), multi-evidence cases, authentication. See the [Roadmap](#roadmap).
 
 ## Technical Methodology
 
@@ -125,6 +131,15 @@ No "good" or "bad" threshold is claimed; interpretation depends on the applicati
 
 No finding from this module claims that compression or statistics prove manipulation.
 
+### Error level analysis (experimental)
+The image is re-encoded once as JPEG at quality *Q* (default 90, selectable 50–99) and the per-pixel error level is `max over R,G,B of |I − JPEG_Q(I)|`. JPEG quantisation is nearly idempotent, so content already quantised at a similar quality changes little while content with a different history (never compressed, or pasted in after the last save) changes more.
+- **Blocks:** error levels are averaged over 16 px blocks aligned to the JPEG grid (larger blocks for big images, at most 64 per side) and scored with a robust z-score against the image, `z = 0.6745·(block − median)/MAD`, with the MAD floored at 0.25.
+- **Outliers:** blocks with *z* > 6 are outlier blocks; 4-connected outliers are reported as clusters with pixel bounding boxes (breadth-first search; no SciPy).
+- **Status:** *indicator detected* when outlier blocks exist, *no indicator* otherwise, *inconclusive* when recompression changes almost nothing, *not applicable* below 16 blocks.
+- **Measured on synthetic images:** a 64×64 region pasted from an uncompressed source into a JPEG q75 image scored *z* > 10 in every block, saved losslessly or re-saved as JPEG q95. The same images without a splice still produce outlier blocks along hard, high-contrast edges.
+
+*Limitations:* ELA responds to edges, fine texture, noise and saturated colour as strongly as to compression history. The threshold is a heuristic, not a calibrated detector, and a uniform error level does not show that nothing was changed. Use the overlay to see *where* the image responds differently, then corroborate.
+
 ### Analysis results and findings
 Every analyzer (`analysis/core/base.py`) returns `status`, `measurements`, `findings`, `interpretation`, `limitations` and `timestamp`. Status is one of **Verified** (a definite check succeeded, e.g. a watermark matched), **Indicator detected**, **No indicator detected**, **Inconclusive** or **Not applicable**. Each finding has four parts:
 
@@ -149,33 +164,74 @@ Original Evidence (SHA-256)
    └── LSB Steganography ──▶ stego.png (SHA-256, payload size, PSNR/SSIM)
 ```
 
-The **timeline** records only operations the application performed: acquisition, metadata extraction, hashing, artifact creation, and each recorded analysis with its result status. Analyses are recorded when run from the Investigation or Comparison views. Exploratory views (e.g. the Steganalysis page) are not recorded. Payloads, watermark messages and keys are never stored in operation records. Records are held in server memory, lost on restart, and not tamper-evident.
+The **timeline** records only operations the application performed: acquisition, metadata extraction, hashing, artifact creation, each recorded analysis with its result status, and report exports. Analyses are recorded when run from the Investigation or Comparison views. Exploratory views (e.g. the Steganalysis page) are not recorded. Payloads, watermark messages and keys are never stored in operation records.
+
+**Operation names** are registered identifiers (`backend/app/services/operation_registry.py`): each has a label, an output label, a category and a description. `derive()` refuses unregistered names; records carrying a well-formed name this build does not know still load and are shown with a readable fallback label. Adding an operation is one `register_operation(OperationSpec(...))` call.
+
+### Hash-chained timeline and tamper verification
+Every timeline event is a link in a SHA-256 hash chain (`analysis/provenance/chain.py`):
+
+```text
+hash_n = SHA-256( canonical_json({ sequence: n, event_id, timestamp, event_type, subject_image_id,
+                                   description, reference_id, content_hash, previous_hash: hash_{n-1} }) )
+hash_{-1} = 000…000 (genesis)        canonical JSON = sorted keys, compact separators, UTF-8, no NaN
+```
+
+`content_hash` is the SHA-256 of the record the event covers (the evidence identity, its metadata, a provenance record together with its derived artifact, an analysis record or a report record), computed on the record exactly as persisted. `GET /api/provenance/{id}/verify` re-derives everything and reports each check separately:
+
+| Check | Detects |
+| --- | --- |
+| Chain links and sequence | removed, inserted or reordered events |
+| Event hashes | an edited event |
+| Covered records | an edited provenance, analysis or report record, or edited metadata |
+| Coverage | records added outside the application (no event covers them) |
+| Artifact lineage | parent links or parent/child hashes that do not agree |
+| Stored files | changed or missing image and report files |
+| Expected head (optional) | truncation or a complete rewrite since a head hash was recorded elsewhere |
+
+*Limitations:* the chain makes the record tamper-*evident*, not tamper-proof. Anyone who can rewrite `storage/` can also recompute every hash; dropping the newest events, or rewriting the whole chain, is only detectable against a head hash kept somewhere else. Every report states the head it covers for that purpose. The chain is not signed and there is no trusted timestamp.
+
+### Persistence
+State is stored as plain files under `storage/` (configurable with `VERIDIA_STORAGE_DIR`; `VERIDIA_PERSIST=false` keeps everything in memory):
+
+```text
+storage/evidence/<evidence_id>/
+    evidence.json                 the EvidenceArtifact: metadata, provenance, analyses, reports, hash-chained timeline
+    images/<image_id>.<ext>       original bytes (unmodified) and derived artifacts (PNG), write-once, mode 0400
+    reports/<report_id>.json|html exported reports, write-once, mode 0400
+```
+
+Directories are created 0700. `evidence.json` is replaced atomically (temp file, fsync, rename). Every path component is a server-generated ID validated against a fixed pattern; anything else under `storage/` is ignored. A record that fails to load is skipped, logged and counted in `/api/health`; it does not stop the others. Image bytes are read from disk on each access, so integrity analysis and verification see the file as it is now.
+
+### Investigation reports
+`POST /api/reports/{id}` writes a snapshot of the record as JSON (`veridia.investigation-report`, schema version 1) and as HTML generated with `string.Template` and `html.escape`. The report contains the evidence identity and metadata, every image with its hash re-checked at export, the provenance tree and operations, every recorded analysis with findings and limitations, the hash-chained timeline, a chain verification and the head hash it covers. The HTML has inline thumbnails and SVG (ELA block maps) only and is served with a Content-Security-Policy that forbids scripts and remote resources. The export itself is then recorded as a `report_exported` event whose content hash covers both file hashes. Reports add no conclusions.
 
 ## Planned Capabilities
 
 | Module | Intended scope |
 | --- | --- |
-| **Evidence Management** | Persistent storage, preserved read-only originals, an operation log. |
+| **Evidence Management** | Multi-evidence cases, retention and deletion policy. |
 | **Metadata & Provenance** | Metadata consistency checks and richer origin/history reasoning. |
-| **Image Integrity** | Manipulation localisation (e.g. error-level or noise-residual maps), double-JPEG detection. |
+| **Image Integrity** | Calibrated manipulation localisation (noise residuals, double-JPEG detection) beyond the experimental ELA. |
 | **Steganography Analysis** | Further detectors (sample-pair analysis, LSB matching / ±1 embedding), calibrated evaluation on real image sets. |
 | **Digital Watermarking** | DWT-domain and geometrically robust watermarking; more attack types. |
-| **Forensic Investigation** | Multi-evidence cases, persistent and tamper-evident records. |
-| **Reporting** | Reproducible reports of findings, methods, parameters and hashes. |
+| **Forensic Investigation** | Signed chain heads or trusted timestamps; examiner identity and notes. |
+| **Reporting** | PDF output; report diffing between exports. |
 
 ## Architecture
 
 ```mermaid
 flowchart TD
     FE["Frontend<br/>React / TypeScript / Vite"] --> API["Backend API<br/>FastAPI routes"]
-    API --> SVC["Service layer<br/>evidence store, derived artifacts, investigation, timeline"]
+    API --> SVC["Service layer<br/>store, derived artifacts, investigation, hash-chained timeline, reports"]
+    SVC --> ST[("storage/<br/>evidence.json + image and report files")]
     SVC --> AN["Analysis layer (Python / NumPy)<br/>common AnalysisResult + Finding"]
     AN --> M["metadata"]
-    AN --> I["integrity (hash, JPEG tables, blockiness, comparison)"]
+    AN --> I["integrity (hash, JPEG tables, blockiness, ELA, comparison)"]
     AN --> S["steganography (LSB, chi-square, RS, histograms)"]
     AN --> W["watermarking (spatial LSB, DCT, attacks, robustness)"]
     AN --> Q["metrics (MSE, PSNR, SSIM, channel statistics)"]
-    AN -.-> P["provenance inference (planned)"]
+    AN --> P["provenance (SHA-256 hash chain); inference planned"]
 ```
 
 Route handlers only validate and delegate. Algorithms live in `analysis/` and are usable and testable without the web layer.
@@ -184,15 +240,16 @@ Route handlers only validate and delegate. Algorithms live in `analysis/` and ar
 
 - Frontend: React 19, TypeScript, Vite, Tailwind CSS, React Router
 - Backend: Python, FastAPI, Pydantic, Uvicorn, python-multipart
-- Analysis: NumPy, Pillow (image file decode/encode, metadata read)
+- Analysis: NumPy, Pillow (image file decode/encode, metadata read, JPEG recompression for ELA)
+- Records and reports: Python standard library (`json`, `hashlib`, `html`, `string.Template`); plain files, no database
 - Testing: pytest, httpx
 
 ## Security Principles
 
 Uploaded files are untrusted. Details and status are in [docs/security.md](docs/security.md).
 
-- **Implemented in this phase:** signature + extension + decode validation; size and pixel limits; sanitized display filenames; server-generated IDs (no user-controlled paths); files never executed; images served with `nosniff`; SHA-256 at intake and for derived files; original bytes preserved unmodified; payloads and keys excluded from provenance.
-- **Not yet implemented:** persistent or on-disk storage, rate limiting, authentication, streaming size enforcement during upload.
+- **Implemented:** signature + extension + decode validation; size and pixel limits; sanitized display filenames; server-generated, pattern-validated IDs as the only path components; write-once read-only image and report files in 0700 directories; atomic record updates; files never executed; images served with `nosniff`; HTML reports escaped and served with a script-blocking CSP; SHA-256 at intake, for derived files and reports; a hash-chained, verifiable timeline; payloads and keys excluded from provenance.
+- **Not yet implemented:** authentication, rate limiting, streaming size enforcement during upload, signed chain heads.
 
 ## Forensic Philosophy
 
@@ -209,21 +266,23 @@ VERIDIA reports **forensic indicators and supporting evidence**, not verdicts. I
 - Attack suite and robustness measurement
 - Channel statistics, histogram/chi-square attack, RS analysis, known-cover comparison
 
-**Phase 4: Forensic & Provenance Integration** ✔ (this release)
+**Phase 4: Forensic & Provenance Integration** ✔
 - Evidence object with derived artifacts, provenance chain and timeline
 - Common analysis-result and finding structure
 - Image-integrity analysis (hash re-verification, JPEG tables, blockiness, channel statistics)
 - Forensic comparison and unified investigation workflow
 
-**Phase 5: Further Watermarking & Steganalysis**
+**Phase 5: Investigation Reports, Persistence & Tamper Evidence** ✔ (this release)
+- File-based persistence under `storage/` (JSON + image files)
+- SHA-256 hash-chained timeline and tamper verification
+- HTML + JSON investigation reports
+- Experimental error level analysis
+- Extensible provenance operation registry; provenance graph UI
+
+**Phase 6: Further Watermarking & Steganalysis**
 - DWT-domain watermarking; geometric resynchronisation
 - Sample-pair analysis, LSB matching detection
-- Evaluation on real image datasets
-
-**Phase 6: Investigation Reports & Persistence**
-- Reproducible investigation reports from recorded findings
-- Persistent, tamper-evident evidence records
-- Manipulation localisation
+- Calibrated manipulation localisation; evaluation on real image datasets
 
 ## Limitations
 
@@ -233,9 +292,10 @@ VERIDIA reports **forensic indicators and supporting evidence**, not verdicts. I
 - Steganalysis results were validated only on synthetic test images and the tool's own embedder. The chi-square attack assumes random-looking payloads, and RS analysis is experimental. Neither is a calibrated detector.
 - Robustness suites and method comparison run synchronously; on large images they can take several seconds.
 - Integrity findings are descriptive. Blockiness is a heuristic calibrated on synthetic images; JPEG table analysis cannot identify devices or detect double compression.
-- The timeline and analysis records are kept in memory and are not tamper-evident; they document what this session did, not the image's history before upload.
+- The timeline documents what VERIDIA did after acquisition, not the image's history before upload. It is tamper-evident, not tamper-proof: without an externally recorded head hash, truncation or a full rewrite of `storage/` cannot be detected.
+- ELA is experimental: edges and texture trigger it as readily as a different compression history.
 - Operations are on the decoded 8-bit RGB image: alpha channels are dropped, 16-bit data is reduced, and EXIF orientation is not applied. Outputs are always PNG.
-- All state is in memory and lost on restart.
+- Storage is single-node plain files with a process-wide lock; it is not designed for several backend processes sharing one `storage/` directory.
 - Accuracy of results depends on the lossless handling of the file; do not re-save outputs as JPEG.
 
 ## Development
@@ -256,11 +316,11 @@ pip install -r requirements-dev.txt
 python -m uvicorn app.main:app --app-dir backend --reload --port 8000
 ```
 
-Running from the root keeps the `analysis` package importable. Health check:
+Running from the root keeps the `analysis` package importable. Evidence is stored in `./storage/` (git-ignored); set `VERIDIA_STORAGE_DIR` to use another directory or `VERIDIA_PERSIST=false` for memory-only operation. Health check:
 
 ```bash
 curl http://localhost:8000/api/health
-# {"status":"ok","service":"VERIDIA","version":"0.4.0"}
+# {"status":"ok","service":"VERIDIA","version":"0.5.0","storage":"persistent","evidence_count":0,"storage_load_errors":0}
 ```
 
 Interactive API docs: <http://localhost:8000/docs>.
@@ -277,12 +337,13 @@ npm run build      # type-check and production build
 ### Using the workflow
 
 1. Open the **Evidence** page and upload a PNG, JPEG or BMP.
-2. **Investigation:** run the full analysis on the original, then again on any derived artifact (optionally with watermark verification). Review the findings, the artifact tree and the timeline.
+2. **Investigation:** run the full analysis on the original (optionally with experimental ELA), then again on any derived artifact (optionally with watermark verification). Review the findings, the ELA overlay, the artifact tree and the timeline.
 3. **Steganography:** enter text, embed, download, then extract.
 4. **Steganalysis:** pick the original or a derived image as the suspected image (optionally with the evidence as known cover) and review the measurements.
 5. **Watermarking:** use the *Spatial Domain* / *DCT Domain* tabs to embed and verify, *Compare Methods* for a side-by-side measurement, and *Robustness Testing* to embed, attack and attempt extraction.
 6. **Comparison:** choose a reference and a derived or suspected image to compare (difference map, metrics, histograms, channel statistics).
-7. **Provenance:** review derived artifacts, operations, recorded analyses and the full timeline.
+7. **Provenance:** check record integrity, explore the provenance graph, and review the hash-chained timeline, operations and recorded analyses.
+8. **Reports:** generate a report, preview or download the HTML and JSON, and later verify the record against the head hash a report covers.
 
 ### Tests
 
@@ -315,10 +376,16 @@ pytest
 | GET | `/api/watermark/dct-map/{id}` | Block-DCT magnitude visualisation |
 | POST | `/api/analysis/compare` | Quality metrics for two images (not recorded) |
 | GET | `/api/analysis/difference/{a}/{b}` | Difference image |
-| POST | `/api/investigation/{evidence_id}/analyses` | Run and record one analysis (`metadata`, `integrity`, `steganalysis`, `watermark`, `comparison`) |
-| POST | `/api/investigation/{evidence_id}/pipeline` | Run and record the full analysis pipeline on an image |
+| GET | `/api/analysis/ela/{id}?quality=90` | Error-level map (not recorded) |
+| POST | `/api/investigation/{evidence_id}/analyses` | Run and record one analysis (`metadata`, `integrity`, `ela`, `steganalysis`, `watermark`, `comparison`) |
+| POST | `/api/investigation/{evidence_id}/pipeline` | Run and record the full analysis pipeline on an image (`include_ela`, `ela_quality`) |
+| GET | `/api/provenance/operations` | Registered image-producing operations |
+| GET | `/api/provenance/{evidence_id}/verify[?expected_head=…]` | Verify the hash chain, covered records, lineage and stored files (read-only) |
+| POST | `/api/reports/{evidence_id}` | Export a JSON + HTML report and record the export |
+| GET | `/api/reports/{evidence_id}` | List exported reports |
+| GET | `/api/reports/{evidence_id}/{report_id}/{json\|html}[?download=true]` | Report file |
 
-`GET /api/evidence/{id}` returns the full evidence object: metadata, derived artifacts, operations, recorded analyses and timeline.
+`GET /api/evidence/{id}` returns the full evidence object: metadata, derived artifacts, operations, recorded analyses, reports and the hash-chained timeline.
 
 ### Project Structure
 
@@ -326,15 +393,16 @@ pytest
 veridia/
 ├── frontend/            React + TypeScript + Vite + Tailwind
 │   └── src/             components, pages, features, services, types
-├── backend/app/         FastAPI: api (routes), core (config), schemas, services (store, artifacts, investigation, timeline)
+├── backend/app/         FastAPI: api (routes), core (config), schemas, services (store, artifacts, investigation, provenance chain, reports, operation registry)
 ├── analysis/            Independent forensic algorithms
 │   ├── core/            Hashing, image decode/encode, Analyzer contract, AnalysisResult/Finding
 │   ├── metadata/        Metadata/EXIF extraction and findings
-│   ├── integrity/       Hash re-verification, JPEG tables, blockiness, forensic comparison
+│   ├── integrity/       Hash re-verification, JPEG tables, blockiness, ELA, forensic comparison
 │   ├── steganography/   LSB embed/extract; steganalysis (histogram/chi-square, RS, LSB analysis)
 │   ├── watermarking/    Spatial LSB and DCT watermarks, block DCT, attacks, robustness runner
 │   ├── metrics/         MSE, PSNR, SSIM, difference map/statistics, channel statistics
-│   └── provenance/      Interface only (provenance inference not implemented)
+│   └── provenance/      SHA-256 hash chain (canonical JSON, link verification); inference not implemented
+├── storage/             Persisted evidence, images and reports (git-ignored, created at startup)
 ├── tests/               pytest suite
 └── docs/                Architecture, security, forensic philosophy
 ```
