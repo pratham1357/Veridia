@@ -8,6 +8,7 @@ VERIDIA provides **forensic indicators and supporting evidence**. It does not de
 4. **Explainability.** Every finding must be traceable to the evidence (by SHA-256), the analyzer name and version, and its parameters.
 5. **Reproducibility.** Re-running the same analyzer version on the same evidence should give the same result.
 6. **Investigator judgement.** The system supports a human assessment; it does not replace it.
+7. **Tamper evidence.** The record of what VERIDIA did is hash-chained and verifiable, and reports state the chain head they cover. A verified chain shows the record is unchanged since it was written, not that the image is authentic.
 
 ## How results are expressed
 

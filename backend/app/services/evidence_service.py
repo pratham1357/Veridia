@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.schemas.evidence import EvidenceArtifact, EvidenceFileType, ImageMetadata
 from app.services.errors import ServiceError
 from app.services.provenance import now, record_event
-from app.services.store import StoredImage, store
+from app.services.store import store
 
 _SIGNATURES = (("PNG", b"\x89PNG\r\n\x1a\n"), ("JPEG", b"\xff\xd8\xff"), ("BMP", b"BM"))
 _FORMATS = {"PNG": ("image/png", {"png"}), "JPEG": ("image/jpeg", {"jpg", "jpeg"}), "BMP": ("image/bmp", {"bmp"})}
@@ -73,6 +73,5 @@ def ingest(filename: str | None, data: bytes) -> EvidenceArtifact:
     record_event(evidence, "metadata_extracted", evidence_id,
                  f"Metadata extracted: EXIF {metadata.exif.status.value.replace('_', ' ')} ({len(metadata.exif.entries)} entries)", timestamp=metadata_at)
     record_event(evidence, "hash_computed", evidence_id, f"SHA-256 calculated: {digest}", timestamp=hashed_at)
-    original = StoredImage(evidence_id, safe_name, mime, data, digest, width, height, evidence_id)
-    store.add_evidence(evidence, original)
+    store.add_evidence(evidence, data)
     return evidence

@@ -3,7 +3,7 @@ import { HistogramChart, LineChart, PairDifferenceChart } from "../components/ch
 import DifferenceImage from "../components/DifferenceImage";
 import { ErrorText, inputClass, PageHeader, Panel, RequireEvidence } from "../components/ui";
 import { useEvidence } from "../features/evidence/EvidenceContext";
-import { OUTPUT_LABEL } from "../features/operations";
+import { useOperations } from "../features/provenance/OperationsContext";
 import { coverComparison, lsbPlaneUrl, steganalysisReport } from "../services/api";
 import type { CoverComparison, SteganalysisReport } from "../types/steganalysis";
 
@@ -152,6 +152,7 @@ function CoverPanel({ comparison }: { comparison: CoverComparison }) {
 
 function Workspace({ evidenceId }: { evidenceId: string }) {
   const { evidence } = useEvidence();
+  const { outputLabel } = useOperations();
   const [suspectId, setSuspectId] = useState(evidenceId);
   const [useCover, setUseCover] = useState(true);
   const [report, setReport] = useState<SteganalysisReport | null>(null);
@@ -182,7 +183,7 @@ function Workspace({ evidenceId }: { evidenceId: string }) {
               <option value={evidenceId}>Active evidence: {evidence?.original_filename}</option>
               {records.map((r) => (
                 <option key={r.record_id} value={r.output_image_id}>
-                  {OUTPUT_LABEL[r.operation]} · {new Date(r.timestamp).toLocaleTimeString()} · {r.output_sha256.slice(0, 10)}…
+                  {outputLabel(r.operation)} · {new Date(r.timestamp).toLocaleTimeString()} · {r.output_sha256.slice(0, 10)}…
                 </option>
               ))}
             </select>

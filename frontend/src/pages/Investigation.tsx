@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AnalysisResultCard, AnalysisStatusBadge, MeasurementsGrid } from "../components/analysis";
 import { ChannelHistograms, ChannelStatsTable } from "../components/channels";
-import { ArtifactTree, Timeline } from "../components/provenance";
+import { ArtifactTree, ChainBadge, Timeline } from "../components/provenance";
 import { Button, ErrorText, Hash, inputClass, PageHeader, Panel, RequireEvidence, Toggle } from "../components/ui";
 import { useEvidence } from "../features/evidence/EvidenceContext";
 import { formatBytes } from "../features/format";
 import ComparisonView from "../features/investigation/ComparisonView";
+import ELAView from "../features/investigation/ELAView";
 import ImagePicker from "../features/investigation/ImagePicker";
 import { ANALYSIS_LABEL, imageName, METHOD_LABEL } from "../features/operations";
 import { useRunner } from "../features/useRunner";
@@ -14,7 +15,8 @@ import { imageUrl, runAnalysis, runPipeline } from "../services/api";
 import type { AnalysisRecord, AnalysisType, IntegrityData, WatermarkCheck } from "../types/analysis";
 import type { EvidenceArtifact } from "../types/evidence";
 
-const ORDER: AnalysisType[] = ["metadata", "integrity", "steganalysis", "watermark", "comparison"];
+const ORDER: AnalysisType[] = ["metadata", "integrity", "ela", "steganalysis", "watermark", "comparison"];
+const ELA_QUALITIES = [75, 85, 90, 95];
 
 function QuantTable({ values }: { values: number[] }) {
   return (
@@ -49,6 +51,8 @@ function Detail({ record, evidence }: { record: AnalysisRecord; evidence: Eviden
         </div>
       );
     }
+    case "ela":
+      return <ELAView record={record} />;
     case "steganalysis":
       return (
         <div>
@@ -74,6 +78,8 @@ function Workspace({ evidenceId }: { evidenceId: string }) {
   const [subject, setSubject] = useState(evidenceId);
   const [withWatermark, setWithWatermark] = useState(false);
   const [wm, setWm] = useState<WatermarkCheck>({ method: "dct", key: "", expected_message: null });
+  const [withEla, setWithEla] = useState(false);
+  const [elaQuality, setElaQuality] = useState(90);
   const { busy, error, run } = useRunner();
 
   useEffect(() => setSubject(evidenceId), [evidenceId]);
@@ -92,7 +98,8 @@ function Workspace({ evidenceId }: { evidenceId: string }) {
   const isOriginal = subject === evidenceId;
   const watermark = withWatermark ? wm : null;
 
-  const pipeline = () => run(() => runPipeline(evidenceId, { subject_id: subject, watermark }), () => void refresh());
+  const pipeline = () =>
+    run(() => runPipeline(evidenceId, { subject_id: subject, watermark, include_ela: withEla, ela_quality: elaQuality }), () => void refresh());
   const single = (type: AnalysisType) =>
     run(
       () => runAnalysis(evidenceId, {
@@ -100,6 +107,7 @@ function Workspace({ evidenceId }: { evidenceId: string }) {
         subject_id: subject,
         reference_id: type === "comparison" || (type === "watermark" && !isOriginal) ? evidenceId : null,
         ...(type === "watermark" ? { watermark: wm } : {}),
+        ...(type === "ela" ? { ela_quality: elaQuality } : {}),
       }),
       () => void refresh(),
     );
@@ -114,7 +122,13 @@ function Workspace({ evidenceId }: { evidenceId: string }) {
             <dt className="text-slate-500">SHA-256</dt><dd><Hash value={evidence.sha256} /></dd>
             <dt className="text-slate-500">File</dt><dd>{evidence.original_filename} · {evidence.file_type.mime_type} · {formatBytes(evidence.file_size)} · {evidence.width}×{evidence.height}</dd>
             <dt className="text-slate-500">Acquired</dt><dd>{new Date(evidence.created_at).toLocaleString()}</dd>
-            <dt className="text-slate-500">Record</dt><dd>{evidence.derived_artifacts.length} derived artifact(s) · {evidence.analyses.length} recorded analysis result(s)</dd>
+            <dt className="text-slate-500">Record</dt><dd>{evidence.derived_artifacts.length} derived artifact(s) · {evidence.analyses.length} recorded analysis result(s) · {evidence.reports.length} report(s)</dd>
+            <dt className="text-slate-500">Integrity</dt>
+            <dd className="flex flex-wrap items-center gap-3">
+              <ChainBadge evidenceId={evidenceId} refreshKey={evidence.timeline.length} />
+              <Link to="/provenance" className="text-xs text-cyan-400 underline">verify</Link>
+              <Link to="/reports" className="text-xs text-cyan-400 underline">export report</Link>
+            </dd>
           </dl>
         </div>
       </Panel>
@@ -122,7 +136,20 @@ function Workspace({ evidenceId }: { evidenceId: string }) {
       <Panel title="Run analysis">
         <div className="grid gap-4 md:grid-cols-2">
           <ImagePicker evidence={evidence} value={subject} onChange={setSubject} label="Image under investigation" />
-          <div>
+          <div className="space-y-3">
+            <div>
+              <label className="flex items-center gap-2 text-sm text-slate-300">
+                <input type="checkbox" checked={withEla} onChange={(e) => setWithEla(e.target.checked)} />
+                Include error level analysis <span className="rounded bg-amber-500/15 px-1.5 text-[10px] uppercase tracking-wider text-amber-300">experimental</span>
+              </label>
+              {withEla && (
+                <div className="mt-2 flex items-center gap-3 text-xs text-slate-400">
+                  Recompression quality
+                  <Toggle options={ELA_QUALITIES.map((q) => ({ id: String(q), label: `q${q}` }))} value={String(elaQuality)} onChange={(q) => setElaQuality(Number(q))} />
+                </div>
+              )}
+            </div>
+            <div>
             <label className="flex items-center gap-2 text-sm text-slate-300">
               <input type="checkbox" checked={withWatermark} onChange={(e) => setWithWatermark(e.target.checked)} />
               Include watermark verification
@@ -134,14 +161,15 @@ function Workspace({ evidenceId }: { evidenceId: string }) {
                 <input placeholder="Expected message (optional)" value={wm.expected_message ?? ""} onChange={(e) => setWm({ ...wm, expected_message: e.target.value || null })} className={inputClass} />
               </div>
             )}
+            </div>
           </div>
         </div>
         <p className="mt-3 text-xs text-slate-500">
-          The full analysis runs metadata → integrity → steganalysis{withWatermark ? " → watermark verification" : ""}{isOriginal ? "" : " → comparison with the original"}. Every result is recorded on the evidence and in the timeline.
+          The full analysis runs metadata → integrity{withEla ? " → ELA" : ""} → steganalysis{withWatermark ? " → watermark verification" : ""}{isOriginal ? "" : " → comparison with the original"}. Every result is recorded on the evidence and anchored in the hash-chained timeline.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <Button disabled={busy} onClick={pipeline}>{busy ? "Running…" : "Run full analysis"}</Button>
-          {ORDER.filter((t) => t !== "comparison" || !isOriginal).filter((t) => t !== "watermark" || withWatermark).map((t) => (
+          {ORDER.filter((t) => t !== "comparison" || !isOriginal).filter((t) => t !== "watermark" || withWatermark).filter((t) => t !== "ela" || withEla).map((t) => (
             <Button key={t} disabled={busy} onClick={() => single(t)} className="bg-slate-700 hover:bg-slate-600">{ANALYSIS_LABEL[t]}</Button>
           ))}
         </div>

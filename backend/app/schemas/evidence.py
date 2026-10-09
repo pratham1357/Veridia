@@ -14,6 +14,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+OPERATION_NAME_PATTERN = r"^[a-z][a-z0-9_]{1,63}$"
+"""Operation names are open-ended identifiers (see ``app.services.operation_registry``), not a closed enum."""
+
 
 class EvidenceFileType(BaseModel):
     mime_type: str = Field(description="Detected from file signature, not from the client-supplied header.")
@@ -74,7 +77,10 @@ class ProvenanceRecord(BaseModel):
     """One processing step applied to the evidence or to an image derived from it."""
 
     record_id: str
-    operation: Literal["lsb_steganography_embed", "watermark_embed", "dct_watermark_embed", "attack"]
+    operation: str = Field(
+        pattern=OPERATION_NAME_PATTERN,
+        description="Registered operation name, e.g. dct_watermark_embed. Unregistered but well-formed names load unchanged.",
+    )
     timestamp: datetime
     input_evidence_id: str = Field(description="Root evidence this processing chain belongs to.")
     input_image_id: str = Field(description="The image actually processed: the evidence or a derived artifact.")
@@ -87,7 +93,7 @@ class ProvenanceRecord(BaseModel):
     metrics: QualityMetrics
 
 
-AnalysisType = Literal["metadata", "integrity", "steganalysis", "watermark", "comparison"]
+AnalysisType = Literal["metadata", "integrity", "ela", "steganalysis", "watermark", "comparison"]
 AnalysisStatus = Literal["verified", "indicator_detected", "no_indicator", "inconclusive", "not_applicable"]
 
 
@@ -129,7 +135,7 @@ class DerivedArtifact(BaseModel):
     artifact_id: str
     parent_image_id: str = Field(description="Evidence or artifact this was derived from.")
     parent_sha256: str
-    operation: str
+    operation: str = Field(pattern=OPERATION_NAME_PATTERN)
     created_at: datetime
     filename: str
     mime_type: str
@@ -140,15 +146,45 @@ class DerivedArtifact(BaseModel):
     provenance_record_id: str
 
 
-class TimelineEvent(BaseModel):
-    """Something the application actually did, in the order it happened."""
+EventType = Literal[
+    "evidence_acquired", "metadata_extracted", "hash_computed", "artifact_created", "analysis_completed", "report_exported"
+]
 
+
+class TimelineEvent(BaseModel):
+    """Something the application actually did, in the order it happened, as one link of a SHA-256 hash chain.
+
+    ``hash`` = SHA-256 of the canonical JSON of every other field, so it covers
+    ``previous_hash`` (the preceding event's hash, or 64 zeros for the first) and
+    ``content_hash`` (the hash of the record the event refers to). Editing,
+    removing or reordering an event, or editing the record it refers to, is
+    detected by ``GET /api/provenance/{evidence_id}/verify``.
+    """
+
+    sequence: int = Field(ge=0, description="Position in the chain, starting at 0.")
     event_id: str
     timestamp: datetime
-    event_type: Literal["evidence_acquired", "metadata_extracted", "hash_computed", "artifact_created", "analysis_completed"]
+    event_type: EventType
     subject_image_id: str
     description: str
-    reference_id: str | None = Field(default=None, description="Related provenance or analysis record.")
+    reference_id: str | None = Field(default=None, description="Related provenance, analysis or report record.")
+    content_hash: str | None = Field(default=None, description="SHA-256 of the canonical JSON of the record this event covers.")
+    previous_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class ReportRecord(BaseModel):
+    """An exported investigation report. Files are write-once; their hashes are covered by the timeline chain."""
+
+    report_id: str
+    created_at: datetime
+    events_covered: int = Field(description="Timeline events included in the report (sequence 0 to events_covered - 1).")
+    chain_head: str = Field(description="Hash of the last event included in the report.")
+    chain_valid: bool = Field(description="Result of the chain verification embedded in the report.")
+    json_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    json_size: int
+    html_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    html_size: int
 
 
 class EvidenceArtifact(BaseModel):
@@ -165,4 +201,5 @@ class EvidenceArtifact(BaseModel):
     provenance: list[ProvenanceRecord] = Field(default_factory=list, description="Image-producing operations.")
     derived_artifacts: list[DerivedArtifact] = Field(default_factory=list)
     analyses: list[AnalysisRecord] = Field(default_factory=list)
-    timeline: list[TimelineEvent] = Field(default_factory=list)
+    reports: list[ReportRecord] = Field(default_factory=list)
+    timeline: list[TimelineEvent] = Field(default_factory=list, description="Hash-chained event log.")

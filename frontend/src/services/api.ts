@@ -1,5 +1,6 @@
 import type { AnalysisRecord, AnalysisType, WatermarkCheck } from "../types/analysis";
-import type { CapacityReport, EvidenceArtifact, OperationResult, StegoExtractResult } from "../types/evidence";
+import type { CapacityReport, EvidenceArtifact, OperationResult, ReportRecord, StegoExtractResult } from "../types/evidence";
+import type { ChainVerification, OperationInfo } from "../types/provenance";
 import type { CoverComparison, SteganalysisReport } from "../types/steganalysis";
 import type {
   AttackInfo,
@@ -14,6 +15,9 @@ export interface HealthResponse {
   status: string;
   service: string;
   version: string;
+  storage: "persistent" | "memory";
+  evidence_count: number;
+  storage_load_errors: number;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -44,6 +48,9 @@ export const imageUrl = (imageId: string, download = false) =>
 export const lsbPlaneUrl = (imageId: string, channel: string) => `/api/steganalysis/lsb-plane/${imageId}/${channel}`;
 export const dctMapUrl = (imageId: string) => `/api/watermark/dct-map/${imageId}`;
 export const differenceUrl = (originalId: string, processedId: string) => `/api/analysis/difference/${originalId}/${processedId}`;
+export const elaUrl = (imageId: string, quality: number) => `/api/analysis/ela/${imageId}?quality=${quality}`;
+export const reportUrl = (evidenceId: string, reportId: string, format: "json" | "html", download = false) =>
+  `/api/reports/${evidenceId}/${reportId}/${format}${download ? "?download=true" : ""}`;
 
 export const getHealth = () => request<HealthResponse>("/api/health");
 
@@ -93,7 +100,18 @@ export const compareMethods = (req: { evidence_id: string; message: string; key:
 
 export const runAnalysis = (
   evidenceId: string,
-  req: { type: AnalysisType; subject_id?: string; reference_id?: string | null; watermark?: WatermarkCheck },
+  req: { type: AnalysisType; subject_id?: string; reference_id?: string | null; watermark?: WatermarkCheck; ela_quality?: number },
 ) => post<AnalysisRecord>(`/api/investigation/${evidenceId}/analyses`, req);
-export const runPipeline = (evidenceId: string, req: { subject_id?: string; watermark?: WatermarkCheck | null }) =>
-  post<AnalysisRecord[]>(`/api/investigation/${evidenceId}/pipeline`, req);
+export const runPipeline = (
+  evidenceId: string,
+  req: { subject_id?: string; watermark?: WatermarkCheck | null; include_ela?: boolean; ela_quality?: number },
+) => post<AnalysisRecord[]>(`/api/investigation/${evidenceId}/pipeline`, req);
+
+export const getOperations = () => request<OperationInfo[]>("/api/provenance/operations");
+export const verifyChain = (evidenceId: string, expectedHead?: string | null) =>
+  request<ChainVerification>(
+    `/api/provenance/${evidenceId}/verify${expectedHead ? `?expected_head=${encodeURIComponent(expectedHead)}` : ""}`,
+  );
+
+export const createReport = (evidenceId: string) => post<ReportRecord>(`/api/reports/${evidenceId}`, {});
+export const listReports = (evidenceId: string) => request<ReportRecord[]>(`/api/reports/${evidenceId}`);

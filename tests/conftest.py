@@ -55,6 +55,23 @@ def jpeg_with_exif(pixels: np.ndarray) -> bytes:
     return buf.getvalue()
 
 
+@pytest.fixture(autouse=True)
+def storage(tmp_path):
+    """Every test runs against a fresh on-disk store in a temporary directory (never the repo's storage/)."""
+    from app.services.store import store
+
+    root = tmp_path / "storage"
+    store.open(root)
+    yield root
+    store.open(None)
+
+
 @pytest.fixture
 def client() -> TestClient:
     return TestClient(app)
+
+
+def upload(client, data: bytes, name: str = "scene.png", mime: str = "image/png") -> dict:
+    r = client.post("/api/evidence/upload", files={"file": (name, data, mime)})
+    assert r.status_code == 201, r.text
+    return r.json()
