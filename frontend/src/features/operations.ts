@@ -4,6 +4,9 @@ import type { WatermarkMethod } from "../types/watermark";
 
 export const OPERATION_LABEL: Record<Operation, string> = {
   lsb_steganography_embed: "LSB steganography embed",
+  
+  keyed_lsb_steganography_embed: "Keyed LSB steganography embed",
+  lsb_matching_steganography_embed: "LSB Matching embed",
   watermark_embed: "Spatial (LSB) watermark embed",
   dct_watermark_embed: "DCT watermark embed",
   attack: "Attack (robustness experiment)",
@@ -11,6 +14,10 @@ export const OPERATION_LABEL: Record<Operation, string> = {
 
 export const OUTPUT_LABEL: Record<Operation, string> = {
   lsb_steganography_embed: "Stego image",
+    
+  keyed_lsb_steganography_embed: "Keyed LSB steganography embed",
+  lsb_matching_steganography_embed: "LSB Matching embed",
+
   watermark_embed: "Spatial-watermarked image",
   dct_watermark_embed: "DCT-watermarked image",
   attack: "Attacked image",

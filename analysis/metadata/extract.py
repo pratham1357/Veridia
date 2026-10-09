@@ -73,7 +73,15 @@ def extract_metadata(data: bytes) -> dict[str, Any]:
     """Extract basic metadata and EXIF from image bytes. Does not modify the input."""
     with Image.open(io.BytesIO(data)) as img:
         try:
-            entries = _exif_entries(img.getexif())
+            raw_exif = img.getexif()
+
+            # Force Pillow to load the nested EXIF IFD, including DateTimeOriginal.
+            try:
+                raw_exif.get_ifd(ExifTags.IFD.Exif)
+            except Exception:
+                pass
+
+            entries = _exif_entries(raw_exif)
             exif = {"status": "available" if entries else "not_available", "entries": entries}
         except Exception:
             exif = {"status": "unknown", "entries": []}

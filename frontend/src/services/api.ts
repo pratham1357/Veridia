@@ -97,3 +97,36 @@ export const runAnalysis = (
 ) => post<AnalysisRecord>(`/api/investigation/${evidenceId}/analyses`, req);
 export const runPipeline = (evidenceId: string, req: { subject_id?: string; watermark?: WatermarkCheck | null }) =>
   post<AnalysisRecord[]>(`/api/investigation/${evidenceId}/pipeline`, req);
+
+export const embedKeyedLSB = (req: {
+  evidence_id: string;
+  payload: string;
+  key: string;
+  bits_per_channel: number;
+}) => post<OperationResult>("/api/steganography/keyed-lsb/embed", req);
+
+export const extractKeyedLSB = (req: {
+  source_id: string;
+  key: string;
+}) => post<StegoExtractResult>(
+  "/api/steganography/keyed-lsb/extract",
+  req
+);
+
+export const embedLSBMatching = (req: {
+  evidence_id: string;
+  payload: string;
+  seed: number;
+}) => post<OperationResult>(
+  "/api/steganography/lsb-matching/embed",
+  req
+);
+
+export const extractLSBMatching = (req: {
+  source_id: string;
+  payload_bytes: number;
+  seed: number;
+}) => post<StegoExtractResult>(
+  "/api/steganography/lsb-matching/extract",
+  req
+);

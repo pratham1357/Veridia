@@ -1,8 +1,14 @@
 /** Mirrors backend/app/schemas/evidence.py and operations.py. Keep in sync. */
 import type { AnalysisRecord } from "./analysis";
 
-export type Operation = "lsb_steganography_embed" | "watermark_embed" | "dct_watermark_embed" | "attack";
 
+export type Operation =
+  | "lsb_steganography_embed"
+  | "keyed_lsb_steganography_embed"
+  | "lsb_matching_steganography_embed"
+  | "watermark_embed"
+  | "dct_watermark_embed"
+  | "attack";
 export type FieldStatus = "available" | "not_available" | "unknown";
 
 export interface MetadataField {

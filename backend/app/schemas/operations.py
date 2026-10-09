@@ -43,3 +43,33 @@ class CompareResult(BaseModel):
     processed: ImageSummary
     metrics: QualityMetrics
     hashes_differ: bool
+
+
+class KeyedLSBEmbedRequest(BaseModel):
+    evidence_id: str
+    payload: str = Field(min_length=1, max_length=100_000)
+    key: str = Field(min_length=1, max_length=256)
+    bits_per_channel: int = Field(default=1, ge=1, le=1)
+
+
+class KeyedLSBExtractRequest(BaseModel):
+    source_id: str
+    key: str = Field(min_length=1, max_length=256)
+
+
+class LSBMatchingEmbedRequest(BaseModel):
+    evidence_id: str
+    payload: str = Field(min_length=1, max_length=100_000)
+    seed: int = Field(default=0, ge=0, le=2**32 - 1)
+
+
+class LSBMatchingExtractRequest(BaseModel):
+    source_id: str
+    payload_bytes: int = Field(ge=1, le=100_000)
+    seed: int = Field(default=0, ge=0, le=2**32 - 1)
+
+
+class SPAEvaluationRequest(BaseModel):
+    cover_ids: list[str] = Field(min_length=1, max_length=100)
+    stego_ids_by_rate: dict[float, list[str]]
+    threshold: float = Field(default=0.05, ge=0, le=1)

@@ -74,7 +74,14 @@ class ProvenanceRecord(BaseModel):
     """One processing step applied to the evidence or to an image derived from it."""
 
     record_id: str
-    operation: Literal["lsb_steganography_embed", "watermark_embed", "dct_watermark_embed", "attack"]
+    operation: Literal[
+        "lsb_steganography_embed",
+        "keyed_lsb_steganography_embed",
+        "lsb_matching_steganography_embed",
+        "watermark_embed",
+        "dct_watermark_embed",
+        "attack",
+    ]
     timestamp: datetime
     input_evidence_id: str = Field(description="Root evidence this processing chain belongs to.")
     input_image_id: str = Field(description="The image actually processed: the evidence or a derived artifact.")

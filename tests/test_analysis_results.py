@@ -55,7 +55,10 @@ def test_integrity_detects_changed_bytes(clean):
 def test_metadata_indicators(natural):
     exif = Image.Exif()
     exif[0x010F], exif[0x0110], exif[0x0131], exif[0x0132] = "Canon", "EOS", "Editor 1.0", "2026:01:02 10:00:00"
-    exif.get_ifd(0x8769)[0x9003] = "2026:01:01 09:00:00"
+    
+    exif_ifd = {0x9003: "2026:01:01 09:00:00"}
+    exif[0x8769] = exif_ifd
+
     buf = io.BytesIO()
     Image.fromarray(natural).save(buf, format="JPEG", quality=85, exif=exif)
     result = _check(MetadataAnalyzer().analyze(_input(buf.getvalue())))
