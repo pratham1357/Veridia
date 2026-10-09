@@ -69,6 +69,10 @@ def operations() -> list[OperationInfo]:
 for _spec in (
     OperationSpec("lsb_steganography_embed", "LSB steganography embed", "Stego image", "steganography",
                   "Sequential RGB LSB embedding of a text payload (payload not recorded)."),
+    OperationSpec("keyed_lsb_steganography_embed", "Keyed LSB steganography embed", "Keyed stego image", "steganography",
+                  "Keyed pseudo-random RGB LSB embedding of a text payload (payload and key not recorded)."),
+    OperationSpec("lsb_matching_steganography_embed", "LSB matching (±1) embed", "LSB-matching stego image", "steganography",
+                  "LSB matching: samples are nudged by ±1 so pair-of-values statistics are not equalised (payload not recorded)."),
     OperationSpec("watermark_embed", "Spatial (LSB) watermark embed", "Spatial-watermarked image", "watermarking",
                   "Keyed, redundant LSB watermark (message and key not recorded)."),
     OperationSpec("dct_watermark_embed", "DCT watermark embed", "DCT-watermarked image", "watermarking",
