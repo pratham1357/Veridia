@@ -1,4 +1,5 @@
 /** Mirrors the common analysis-result structure (backend/app/schemas/evidence.py). Keep in sync. */
+import type { WatermarkMethod } from "./watermark";
 
 export type AnalysisType = "metadata" | "integrity" | "ela" | "steganalysis" | "watermark" | "comparison";
 export type AnalysisStatus = "verified" | "indicator_detected" | "no_indicator" | "inconclusive" | "not_applicable";
@@ -78,7 +79,7 @@ export interface ELAData {
 }
 
 export interface WatermarkCheck {
-  method: "spatial_lsb" | "dct";
+  method: WatermarkMethod;
   key: string;
   expected_message: string | null;
 }

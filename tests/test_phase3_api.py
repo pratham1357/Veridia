@@ -78,11 +78,12 @@ def test_compare_methods(client, natural_png):
     r = client.post("/api/watermark/compare-methods", json={"evidence_id": ev["evidence_id"], "message": "VERIDIA", "key": "k"})
     assert r.status_code == 200
     methods = {m["method"]: m for m in r.json()["methods"]}
-    assert set(methods) == {"spatial_lsb", "dct"}
+    assert set(methods) == {"spatial_lsb", "dct", "dwt"}
     assert all(m["verification"]["status"] == "verified" for m in methods.values())
     jpeg75 = {m: next(row for row in v["robustness"] if row["attack"] == "jpeg" and row["parameter"] == 75)["status"]
               for m, v in methods.items()}
-    assert jpeg75 == {"spatial_lsb": "not_found", "dct": "verified"}
+    # measured on this fixture: the fragile spatial mark dies, both transform-domain marks survive
+    assert jpeg75 == {"spatial_lsb": "not_found", "dct": "verified", "dwt": "verified"}
     too_long = client.post("/api/watermark/compare-methods", json={"evidence_id": ev["evidence_id"], "message": "x" * 17})
     assert too_long.status_code == 422
 

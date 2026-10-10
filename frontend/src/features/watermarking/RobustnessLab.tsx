@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import DifferenceImage from "../../components/DifferenceImage";
 import { Button, ErrorText, inputClass, Panel, Toggle } from "../../components/ui";
 import { RobustnessTable } from "../../components/watermark";
-import { embedWatermark, imageUrl, listAttacks, runAttack, runRobustness } from "../../services/api";
+import SweepChart from "../../components/SweepChart";
+import { embedWatermark, imageUrl, listAttacks, runAttack, runRobustness, runSweep } from "../../services/api";
 import type { ImageSummary } from "../../types/evidence";
-import type { AttackInfo, RobustnessRow, WatermarkMethod } from "../../types/watermark";
+import type { AttackInfo, RobustnessRow, SweepReport, WatermarkMethod } from "../../types/watermark";
 import { useEvidence } from "../evidence/EvidenceContext";
-import { MAX_MESSAGE_BYTES, METHOD_LABEL } from "../operations";
+import { MAX_MESSAGE_BYTES, METHOD_LABEL, WATERMARK_METHODS } from "../operations";
 import { useRunner } from "../useRunner";
 
 interface Marked {
@@ -30,6 +31,8 @@ export default function RobustnessLab({ evidenceId }: { evidenceId: string }) {
   const [last, setLast] = useState<{ image: ImageSummary; row: RobustnessRow } | null>(null);
   const [history, setHistory] = useState<RobustnessRow[]>([]);
   const [suite, setSuite] = useState<RobustnessRow[] | null>(null);
+  const [sweepAll, setSweepAll] = useState(true);
+  const [sweep, setSweep] = useState<SweepReport | null>(null);
   const { busy, error, run } = useRunner();
 
   useEffect(() => {
@@ -40,6 +43,7 @@ export default function RobustnessLab({ evidenceId }: { evidenceId: string }) {
     setLast(null);
     setHistory([]);
     setSuite(null);
+    setSweep(null);
   }, [evidenceId]);
 
   const attack = attacks.find((a) => a.name === attackName);
@@ -53,6 +57,7 @@ export default function RobustnessLab({ evidenceId }: { evidenceId: string }) {
         setLast(null);
         setHistory([]);
         setSuite(null);
+        setSweep(null);
         void refresh();
       },
     );
@@ -68,13 +73,34 @@ export default function RobustnessLab({ evidenceId }: { evidenceId: string }) {
       },
     );
 
+  const markedBytes = marked ? new TextEncoder().encode(marked.message).length : 0;
+  const tooLongForAll = sweepAll && markedBytes > Math.min(MAX_MESSAGE_BYTES.dct, MAX_MESSAGE_BYTES.dwt);
+
+  const runParameterSweep = () =>
+    marked &&
+    run(
+      () =>
+        runSweep({
+          image_id: sweepAll ? evidenceId : marked.image.image_id,
+          method: marked.method,
+          message: marked.message,
+          key: marked.key,
+          attack: attackName,
+          ...(sweepAll ? { methods: [...WATERMARK_METHODS] } : {}),
+        }),
+      (r) => {
+        setSweep(r);
+        if (sweepAll) void refresh(); // sweeping all methods embeds one artifact per method
+      },
+    );
+
   const runSuite = () =>
     marked && run(() => runRobustness({ image_id: marked.image.image_id, method: marked.method, message: marked.message, key: marked.key }), (r) => setSuite(r.rows));
 
   return (
     <>
       <Panel title="1 · Embed a watermark">
-        <Toggle options={(["dct", "spatial_lsb"] as const).map((m) => ({ id: m, label: METHOD_LABEL[m] }))} value={method} onChange={setMethod} />
+        <Toggle options={WATERMARK_METHODS.map((m) => ({ id: m, label: METHOD_LABEL[m] }))} value={method} onChange={setMethod} />
         <label className="mt-3 block text-xs text-slate-400">Message (1–{MAX_MESSAGE_BYTES[method]} bytes)</label>
         <input value={message} onChange={(e) => setMessage(e.target.value)} className={inputClass} />
         <label className="mt-3 block text-xs text-slate-400">Key (optional)</label>
@@ -144,7 +170,41 @@ export default function RobustnessLab({ evidenceId }: { evidenceId: string }) {
             </Panel>
           )}
 
-          <Panel title="3 · Full attack suite">
+          <Panel title="3 · Parameter sweep">
+            <p className="mb-3 text-sm text-slate-400">
+              Runs <strong>{attack?.label ?? attackName}</strong> across its full range and plots the raw bit error rate, so the point where recovery fails is
+              visible rather than inferred. JPEG sweeps quality 10–100; other attacks sweep their whole range in ten steps.
+            </p>
+            <label className="flex items-center gap-2 text-sm text-slate-300">
+              <input type="checkbox" checked={sweepAll} onChange={(e) => setSweepAll(e.target.checked)} />
+              Compare all three methods (embeds one watermarked artifact per method from the active evidence)
+            </label>
+            <div>
+              <Button className="mt-3" disabled={busy || tooLongForAll} onClick={runParameterSweep}>{busy ? "Running…" : `Sweep ${attack?.label ?? attackName}`}</Button>
+            </div>
+            {tooLongForAll && marked && (
+              <p className="mt-2 text-xs text-amber-400">
+                This watermark message is {markedBytes} bytes; the DCT and DWT methods carry at most {Math.min(MAX_MESSAGE_BYTES.dct, MAX_MESSAGE_BYTES.dwt)}. Untick the box to sweep only
+                the {METHOD_LABEL[marked.method]} image, or embed a shorter message.
+              </p>
+            )}
+            {sweep && (
+              <div className="mt-4">
+                <SweepChart report={sweep} />
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-xs text-slate-400">Measurements per method</summary>
+                  {sweep.series.map((s) => (
+                    <div key={s.method} className="mt-3">
+                      <div className="mb-1 text-xs uppercase tracking-wider text-slate-500">{METHOD_LABEL[s.method]}</div>
+                      <RobustnessTable rows={s.rows} />
+                    </div>
+                  ))}
+                </details>
+              </div>
+            )}
+          </Panel>
+
+          <Panel title="4 · Full attack suite">
             <p className="mb-3 text-sm text-slate-400">Runs every preset of every attack against this watermarked image (results are not stored as artifacts).</p>
             <Button disabled={busy} onClick={runSuite}>{busy ? "Running…" : "Run suite"}</Button>
             {suite && <div className="mt-4"><RobustnessTable rows={suite} /></div>}

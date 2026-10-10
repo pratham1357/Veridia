@@ -42,15 +42,14 @@ def embed(image: np.ndarray, payload: bytes, seed: int = 0) -> np.ndarray:
     result = image.copy()
     flat = result.reshape(-1)
 
-    for position, bit in zip(order, bits):
-        value = int(flat[position])
-        if (value & 1) != int(bit):
-            if value == 0:
-                flat[position] = 1
-            elif value == 255:
-                flat[position] = 254
-            else:
-                flat[position] = value + int(rng.choice([-1, 1]))
+    # Vectorised: work on all selected samples at once instead of one bit at a time.
+    # The sample order is drawn first, exactly as in extract(), so extraction is unchanged.
+    values = flat[order].astype(np.int16)  # signed arithmetic; the guards below keep the result in 0..255
+    mismatch = (values & 1) != bits
+    steps = rng.choice(np.array([-1, 1], dtype=np.int16), size=values.size)
+    steps[values == 0] = 1  # 0 can only go up, never wrap to 255
+    steps[values == 255] = -1  # 255 can only go down, never wrap to 0
+    flat[order] = np.where(mismatch, values + steps, values).astype(np.uint8)
 
     return result
 

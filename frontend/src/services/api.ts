@@ -7,6 +7,7 @@ import type {
   AttackResult,
   CompareMethodsResult,
   RobustnessReport,
+  SweepReport,
   WatermarkMethod,
   WatermarkVerifyResult,
 } from "../types/watermark";
@@ -47,6 +48,7 @@ export const imageUrl = (imageId: string, download = false) =>
 
 export const lsbPlaneUrl = (imageId: string, channel: string) => `/api/steganalysis/lsb-plane/${imageId}/${channel}`;
 export const dctMapUrl = (imageId: string) => `/api/watermark/dct-map/${imageId}`;
+export const dwtMapUrl = (imageId: string) => `/api/watermark/dwt-map/${imageId}`;
 export const differenceUrl = (originalId: string, processedId: string) => `/api/analysis/difference/${originalId}/${processedId}`;
 export const elaUrl = (imageId: string, quality: number) => `/api/analysis/ela/${imageId}?quality=${quality}`;
 export const reportUrl = (evidenceId: string, reportId: string, format: "json" | "html", download = false) =>
@@ -95,6 +97,17 @@ export const runAttack = (req: {
 }) => post<AttackResult>("/api/watermark/attack", req);
 export const runRobustness = (req: { image_id: string; method: WatermarkMethod; message: string; key: string }) =>
   post<RobustnessReport>("/api/watermark/robustness", req);
+export const runSweep = (req: {
+  image_id: string;
+  method: WatermarkMethod;
+  message: string;
+  key: string;
+  attack?: string;
+  start?: number;
+  stop?: number;
+  step?: number;
+  methods?: WatermarkMethod[];
+}) => post<SweepReport>("/api/watermark/sweep", req);
 export const compareMethods = (req: { evidence_id: string; message: string; key: string; strength?: number }) =>
   post<CompareMethodsResult>("/api/watermark/compare-methods", req);
 

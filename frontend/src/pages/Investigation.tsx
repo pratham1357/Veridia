@@ -9,7 +9,7 @@ import { formatBytes } from "../features/format";
 import ComparisonView from "../features/investigation/ComparisonView";
 import ELAView from "../features/investigation/ELAView";
 import ImagePicker from "../features/investigation/ImagePicker";
-import { ANALYSIS_LABEL, imageName, METHOD_LABEL } from "../features/operations";
+import { ANALYSIS_LABEL, imageName, METHOD_LABEL, WATERMARK_METHODS } from "../features/operations";
 import { useRunner } from "../features/useRunner";
 import { imageUrl, runAnalysis, runPipeline } from "../services/api";
 import type { AnalysisRecord, AnalysisType, IntegrityData, WatermarkCheck } from "../types/analysis";
@@ -156,7 +156,7 @@ function Workspace({ evidenceId }: { evidenceId: string }) {
             </label>
             {withWatermark && (
               <div className="mt-2 space-y-2">
-                <Toggle options={(["dct", "spatial_lsb"] as const).map((m) => ({ id: m, label: METHOD_LABEL[m] }))} value={wm.method} onChange={(method) => setWm({ ...wm, method })} />
+                <Toggle options={WATERMARK_METHODS.map((m) => ({ id: m, label: METHOD_LABEL[m] }))} value={wm.method} onChange={(method) => setWm({ ...wm, method })} />
                 <input placeholder="Key (not recorded)" value={wm.key} onChange={(e) => setWm({ ...wm, key: e.target.value })} className={inputClass} />
                 <input placeholder="Expected message (optional)" value={wm.expected_message ?? ""} onChange={(e) => setWm({ ...wm, expected_message: e.target.value || null })} className={inputClass} />
               </div>

@@ -10,6 +10,8 @@ from app.schemas.watermark import (
     CompareMethodsResult,
     RobustnessReport,
     RobustnessRequest,
+    SweepReport,
+    SweepRequest,
     WatermarkEmbedRequest,
     WatermarkVerifyRequest,
     WatermarkVerifyResult,
@@ -47,6 +49,18 @@ def robustness(req: RobustnessRequest) -> RobustnessReport:
 @router.post("/compare-methods", response_model=CompareMethodsResult)
 def compare_methods(req: CompareMethodsRequest) -> CompareMethodsResult:
     return watermarking.compare_methods(req.evidence_id, req.message, req.key, req.strength)
+
+
+@router.post("/sweep", response_model=SweepReport)
+def sweep(req: SweepRequest) -> SweepReport:
+    """Run one attack across a parameter range (default: JPEG quality 10-100)."""
+    return watermarking.sweep(req)
+
+
+@router.get("/dwt-map/{image_id}")
+def dwt_map(image_id: str) -> Response:
+    """The four one-level Haar sub-bands tiled as LL/LH over HL/HH."""
+    return Response(content=watermarking.dwt_map_png(image_id), media_type="image/png")
 
 
 @router.get("/dct-map/{image_id}")

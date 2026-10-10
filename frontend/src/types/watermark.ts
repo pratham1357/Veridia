@@ -1,7 +1,7 @@
 /** Mirrors backend/app/schemas/watermark.py. Keep in sync. */
 import type { ImageSummary, ProvenanceRecord, QualityMetrics } from "./evidence";
 
-export type WatermarkMethod = "spatial_lsb" | "dct";
+export type WatermarkMethod = "spatial_lsb" | "dct" | "dwt";
 export type VerifyStatus = "verified" | "mismatch" | "extracted" | "not_found";
 
 export interface WatermarkVerifyResult {
@@ -55,6 +55,19 @@ export interface MethodComparison {
   record: ProvenanceRecord;
   verification: WatermarkVerifyResult;
   robustness: RobustnessRow[];
+}
+
+export interface SweepSeries {
+  method: WatermarkMethod;
+  image_id: string;
+  rows: RobustnessRow[];
+}
+
+export interface SweepReport {
+  attack: string;
+  attack_label: string;
+  parameter_label: string;
+  series: SweepSeries[];
 }
 
 export interface CompareMethodsResult {

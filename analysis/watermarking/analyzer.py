@@ -2,9 +2,10 @@ from analysis.core import AnalysisResult, Analyzer, EvidenceInput, Finding, deco
 from analysis.metrics import compare_images
 from analysis.watermarking.robustness import SCHEMES
 
-METHOD_LABEL = {"spatial_lsb": "spatial-domain (LSB)", "dct": "DCT-domain"}
+# One label per entry in robustness.SCHEMES; tests/test_analysis_results.py fails if a scheme is added without one.
+METHOD_LABEL = {"spatial_lsb": "spatial-domain (LSB)", "dct": "DCT-domain", "dwt": "DWT-domain"}
 LIMITATIONS = [
-    "Verification shows that a mark made with this method and key is present. It does not show that the rest of the content is unmodified: the DCT mark survives JPEG and noise, and anyone with the method and key could embed it.",
+    "Verification shows that a mark made with this method and key is present. It does not show that the rest of the content is unmodified: the transform-domain marks (DCT, DWT) survive moderate JPEG and noise, and anyone with the method and key could embed it.",
     "A missing watermark does not show that the image was never marked: a wrong key or method, or processing (e.g. JPEG for the spatial mark), prevents recovery.",
 ]
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import ImageComparison from "../../components/ImageComparison";
 import { Button, ErrorText, inputClass, Panel, Toggle } from "../../components/ui";
 import { VerificationResult } from "../../components/watermark";
-import { dctMapUrl, embedWatermark, imageUrl, verifyWatermark } from "../../services/api";
+import { dctMapUrl, dwtMapUrl, embedWatermark, imageUrl, verifyWatermark } from "../../services/api";
 import type { OperationResult } from "../../types/evidence";
 import type { WatermarkMethod, WatermarkVerifyResult } from "../../types/watermark";
 import { useEvidence } from "../evidence/EvidenceContext";
@@ -25,6 +25,17 @@ const CONCEPT: Record<WatermarkMethod, React.ReactNode> = {
       difference is pushed to at least +strength for a 1 and −strength for a 0. Low frequencies are avoided because changes there are more
       visible, and high frequencies because JPEG discards them first. Extraction is blind: it re-computes the DCT and votes across the
       repeated copies. Higher strength generally means more distortion and more robustness; measure both.
+    </>
+  ),
+  dwt: (
+    <>
+      <strong>Wavelet domain:</strong> a one-level Haar transform splits the luminance channel into four half-size sub-bands — LL
+      (a blurred copy), LH and HL (horizontal and vertical edges) and HH (diagonal detail). One bit is carried at each position by the
+      <em> relationship</em> between the two directional detail coefficients, HL − LH, pushed to at least +strength for a 1 and −strength
+      for a 0. LL is avoided because it holds the visible structure, HH because compression discards it first. Unlike the block DCT, the
+      transform covers the whole image at once, so carriers are not tied to an 8×8 grid. Because a single level puts LH and HL in the
+      highest frequency octave, this mark is <strong>less JPEG-robust than the DCT mark</strong> but is unaffected by a constant brightness
+      shift, which never reaches the detail bands.
     </>
   ),
 };
@@ -108,6 +119,23 @@ export default function EmbedVerify({ method, evidenceId }: { method: WatermarkM
             <div className="mt-2 font-mono text-xs text-slate-500">{JSON.stringify(result.record.parameters)}</div>
           </Panel>
           <ImageComparison original={evidenceSummary(evidence)} processed={result.artifact} metrics={result.record.metrics} processedLabel="Watermarked" />
+          {method === "dwt" && (
+            <Panel title="Wavelet-domain view (one-level Haar sub-bands)">
+              <div className="flex flex-col gap-4 md:flex-row">
+                {[["Original", evidenceId], ["Watermarked", result.artifact.image_id]].map(([label, id]) => (
+                  <div key={id} className="min-w-0 flex-1">
+                    <div className="mb-1 text-xs text-slate-500">{label}</div>
+                    <img src={dwtMapUrl(id)} alt={`${label} Haar sub-bands`} style={{ imageRendering: "pixelated" }} className="max-h-72 w-full rounded border border-slate-800 bg-black object-contain" />
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                Tiled LL (top-left, the half-size approximation) and LH / HL / HH detail bands, shown as absolute magnitudes. The watermark adjusts the
+                HL and LH bands only; the change is small next to natural edge energy, so the views look nearly identical. The difference image above shows
+                where it landed.
+              </p>
+            </Panel>
+          )}
           {method === "dct" && (
             <Panel title="DCT-domain view (luminance, 8×8 blocks)">
               <div className="flex flex-col gap-4 md:flex-row">

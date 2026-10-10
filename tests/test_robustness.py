@@ -26,7 +26,9 @@ def test_attacks_preserve_shape_and_validate(natural):
     with pytest.raises(ValueError):
         apply_attack(natural, "jpeg", 0)
     with pytest.raises(ValueError):
-        apply_attack(natural, "rotate", 5)
+        apply_attack(natural, "shear", 5)  # not in the catalogue
+    with pytest.raises(ValueError):
+        apply_attack(natural, "rotate", 999)  # out of the documented range
 
 
 def test_jpeg(dct_marked, lsb_marked):

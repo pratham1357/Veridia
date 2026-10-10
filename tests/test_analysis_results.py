@@ -91,4 +91,32 @@ def test_watermark_statuses(natural, clean):
     tiny = _input(encode_png(natural[:64, :64]))
     assert _check(WatermarkAnalyzer("dct").analyze(tiny)).status == "not_applicable"
     with pytest.raises(ValueError):
-        WatermarkAnalyzer("dwt")
+        WatermarkAnalyzer("wavelet_packet")  # not a registered method
+
+
+def test_every_registered_watermark_scheme_has_an_analyzer_label():
+    """Adding a scheme to robustness.SCHEMES without a label made WatermarkAnalyzer raise KeyError (HTTP 500)."""
+    from analysis.watermarking.analyzer import METHOD_LABEL
+    from analysis.watermarking.robustness import SCHEMES
+
+    assert set(SCHEMES) <= set(METHOD_LABEL)
+
+
+def test_dwt_watermark_analysis_statuses(natural, clean):
+    from analysis.watermarking import dwt_watermark
+
+    marked = _input(encode_png(dwt_watermark.embed(natural, "owner", "k")), "dwt.png")
+    verified = _check(WatermarkAnalyzer("dwt", "k", "owner", reference=clean).analyze(marked))
+    assert verified.status == "verified" and verified.measurements["method"] == "dwt"
+    assert "DWT-domain" in verified.findings[0].finding and verified.measurements["reference_psnr_db"] > 35
+    assert _check(WatermarkAnalyzer("dwt", "k", "other").analyze(marked)).status == "indicator_detected"
+    assert _check(WatermarkAnalyzer("dwt", "wrong").analyze(marked)).status == "no_indicator"
+    assert _check(WatermarkAnalyzer("dct", "k").analyze(marked)).status == "no_indicator"  # wrong method for this mark
+    tiny = _input(encode_png(natural[:32, :32]))  # 256 carriers < the 504 DWT needs
+    assert _check(WatermarkAnalyzer("dwt").analyze(tiny)).status == "not_applicable"
+
+
+@pytest.mark.parametrize("method", ["", "DWT", "dwt2", "wavelet_packet", "lsb"])
+def test_unsupported_watermark_methods_are_still_rejected(method):
+    with pytest.raises(ValueError, match="Unknown watermark method"):
+        WatermarkAnalyzer(method)

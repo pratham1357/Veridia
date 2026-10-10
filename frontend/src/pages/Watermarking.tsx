@@ -4,11 +4,12 @@ import CompareMethods from "../features/watermarking/CompareMethods";
 import EmbedVerify from "../features/watermarking/EmbedVerify";
 import RobustnessLab from "../features/watermarking/RobustnessLab";
 
-type Tab = "spatial" | "dct" | "compare" | "robustness";
+type Tab = "spatial" | "dct" | "dwt" | "compare" | "robustness";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "spatial", label: "Spatial Domain" },
   { id: "dct", label: "DCT Domain" },
+  { id: "dwt", label: "DWT Domain" },
   { id: "compare", label: "Compare Methods" },
   { id: "robustness", label: "Robustness Testing" },
 ];
@@ -31,6 +32,7 @@ export default function Watermarking() {
           <>
             {tab === "spatial" && <EmbedVerify key="spatial" method="spatial_lsb" evidenceId={id} />}
             {tab === "dct" && <EmbedVerify key="dct" method="dct" evidenceId={id} />}
+            {tab === "dwt" && <EmbedVerify key="dwt" method="dwt" evidenceId={id} />}
             {tab === "compare" && <CompareMethods evidenceId={id} />}
             {tab === "robustness" && <RobustnessLab evidenceId={id} />}
           </>

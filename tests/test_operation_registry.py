@@ -50,8 +50,8 @@ def test_register_validation():
 
 
 def test_unknown_operation_falls_back_to_readable_label():
-    info = registry.describe("dwt_watermark_embed")
-    assert not info.registered and info.label == "Dwt watermark embed" and info.category == "unregistered"
+    info = registry.describe("dft_watermark_embed")
+    assert not info.registered and info.label == "Dft watermark embed" and info.category == "unregistered"
 
 
 def test_derive_requires_registration(client, natural_png):

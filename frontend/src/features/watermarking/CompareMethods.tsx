@@ -6,7 +6,7 @@ import { formatPsnr } from "../format";
 import { compareMethods } from "../../services/api";
 import type { CompareMethodsResult } from "../../types/watermark";
 import { useEvidence } from "../evidence/EvidenceContext";
-import { METHOD_LABEL } from "../operations";
+import { METHOD_LABEL, WATERMARK_METHODS } from "../operations";
 import { useRunner } from "../useRunner";
 
 export default function CompareMethods({ evidenceId }: { evidenceId: string }) {
@@ -24,7 +24,8 @@ export default function CompareMethods({ evidenceId }: { evidenceId: string }) {
       void refresh();
     });
 
-  const [spatial, dct] = result ? [result.methods[0], result.methods[1]] : [null, null];
+  const byMethod = new Map((result?.methods ?? []).map((m) => [m.method, m]));
+  const series = WATERMARK_METHODS.map((m) => byMethod.get(m)).filter((m) => m !== undefined);
 
   return (
     <>
@@ -45,20 +46,20 @@ export default function CompareMethods({ evidenceId }: { evidenceId: string }) {
         <ErrorText message={error} />
       </Panel>
 
-      {result && spatial && dct && (
+      {result && series.length > 0 && (
         <>
           <Panel title="Imperceptibility and verification">
             <table className="w-full max-w-3xl text-sm">
               <thead className="text-left text-xs text-slate-500">
-                <tr><th className="py-2 pr-4">Measurement</th><th className="pr-4">{METHOD_LABEL.spatial_lsb}</th><th>{METHOD_LABEL.dct}</th></tr>
+                <tr><th className="py-2 pr-4">Measurement</th>{series.map((m) => <th key={m.method} className="pr-4">{METHOD_LABEL[m.method]}</th>)}</tr>
               </thead>
               <tbody className="divide-y divide-slate-800 font-mono text-xs">
-                <tr><td className="py-1.5 font-sans text-slate-400">MSE</td><td>{spatial.record.metrics.mse.toFixed(4)}</td><td>{dct.record.metrics.mse.toFixed(4)}</td></tr>
-                <tr><td className="py-1.5 font-sans text-slate-400">PSNR</td><td>{formatPsnr(spatial.record.metrics.psnr_db)}</td><td>{formatPsnr(dct.record.metrics.psnr_db)}</td></tr>
-                <tr><td className="py-1.5 font-sans text-slate-400">SSIM</td><td>{spatial.record.metrics.ssim.toFixed(4)}</td><td>{dct.record.metrics.ssim.toFixed(4)}</td></tr>
-                <tr><td className="py-1.5 font-sans text-slate-400">Verification (no attack)</td><td><StatusBadge status={spatial.verification.status} /></td><td><StatusBadge status={dct.verification.status} /></td></tr>
+                <tr><td className="py-1.5 font-sans text-slate-400">MSE</td>{series.map((m) => <td key={m.method}>{m.record.metrics.mse.toFixed(4)}</td>)}</tr>
+                <tr><td className="py-1.5 font-sans text-slate-400">PSNR</td>{series.map((m) => <td key={m.method}>{formatPsnr(m.record.metrics.psnr_db)}</td>)}</tr>
+                <tr><td className="py-1.5 font-sans text-slate-400">SSIM</td>{series.map((m) => <td key={m.method}>{m.record.metrics.ssim.toFixed(4)}</td>)}</tr>
+                <tr><td className="py-1.5 font-sans text-slate-400">Verification (no attack)</td>{series.map((m) => <td key={m.method}><StatusBadge status={m.verification.status} /></td>)}</tr>
                 <tr><td className="py-1.5 font-sans text-slate-400">Attacks verified</td>
-                  {[spatial, dct].map((m) => {
+                  {series.map((m) => {
                     const attacked = m.robustness.filter((r) => r.attack !== "none");
                     return <td key={m.method}>{attacked.filter((r) => r.status === "verified").length} / {attacked.length}</td>;
                   })}
@@ -66,36 +67,41 @@ export default function CompareMethods({ evidenceId }: { evidenceId: string }) {
               </tbody>
             </table>
             <div className="mt-4 flex flex-col gap-4 md:flex-row">
-              <DifferenceImage originalId={result.original.image_id} processedId={spatial.artifact.image_id} />
-              <DifferenceImage originalId={result.original.image_id} processedId={dct.artifact.image_id} />
+              {series.map((m) => <DifferenceImage key={m.method} originalId={result.original.image_id} processedId={m.artifact.image_id} />)}
             </div>
-            <p className="mt-2 text-xs text-slate-500">Left: spatial-domain difference. Right: DCT-domain difference (note the 8×8 block structure).</p>
+            <p className="mt-2 text-xs text-slate-500">
+              Difference images in method order: {series.map((m) => METHOD_LABEL[m.method]).join(", ")}. The DCT footprint shows an 8×8 block structure; the
+              wavelet footprint follows edges instead, because its carriers are the directional detail bands.
+            </p>
           </Panel>
 
           <Panel title="Robustness, side by side">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-left text-xs text-slate-500">
-                  <tr><th className="py-2 pr-4">Attack</th><th className="pr-4">Parameter</th><th className="pr-4">{METHOD_LABEL.spatial_lsb}</th><th>{METHOD_LABEL.dct}</th></tr>
+                  <tr><th className="py-2 pr-4">Attack</th><th className="pr-4">Parameter</th>{series.map((m) => <th key={m.method} className="pr-4">{METHOD_LABEL[m.method]}</th>)}</tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">
-                  {spatial.robustness.map((row, i) => {
-                    const other = dct.robustness[i];
-                    return (
-                      <tr key={i}>
-                        <td className="py-1.5 pr-4">{row.attack_label}</td>
-                        <td className="pr-4 font-mono text-xs">{row.attack === "none" ? "—" : `${row.parameter_label} ${row.parameter}`}</td>
-                        <td className="pr-4"><StatusBadge status={row.status} /> <span className="ml-1 font-mono text-xs text-slate-500">BER {formatBer(row.bit_error_rate)}</span></td>
-                        <td><StatusBadge status={other.status} /> <span className="ml-1 font-mono text-xs text-slate-500">BER {formatBer(other.bit_error_rate)}</span></td>
-                      </tr>
-                    );
-                  })}
+                  {series[0].robustness.map((row, i) => (
+                    <tr key={i}>
+                      <td className="py-1.5 pr-4">{row.attack_label}</td>
+                      <td className="pr-4 font-mono text-xs">{row.attack === "none" ? "—" : `${row.parameter_label} ${row.parameter}`}</td>
+                      {series.map((m) => {
+                        const cell = m.robustness[i];
+                        return (
+                          <td key={m.method} className="pr-4">
+                            <StatusBadge status={cell.status} /> <span className="ml-1 font-mono text-xs text-slate-500">BER {formatBer(cell.bit_error_rate)}</span>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
             <details className="mt-4 text-sm">
               <summary className="cursor-pointer text-xs text-slate-400">Full measurements per method</summary>
-              {[spatial, dct].map((m) => (
+              {series.map((m) => (
                 <div key={m.method} className="mt-4">
                   <div className="mb-2 text-xs uppercase tracking-wider text-slate-500">{METHOD_LABEL[m.method]}</div>
                   <RobustnessTable rows={m.robustness} />

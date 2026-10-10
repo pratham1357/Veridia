@@ -1,6 +1,7 @@
-"""Types shared by the watermarking schemes (spatial LSB and DCT)."""
+"""Types and payload helpers shared by the watermarking schemes (spatial LSB, DCT, DWT)."""
 
 import hashlib
+import zlib
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -28,3 +29,21 @@ def status_for(text: str, expected: str | None) -> str:
     if expected is None:
         return "extracted"
     return "verified" if text == expected else "mismatch"
+
+
+def payload_bits(message: bytes, max_bytes: int) -> np.ndarray:
+    """Transform-domain payload as a bit array: ``length (1) | message padded | CRC-32 (4)``.
+
+    The same layout the DCT scheme uses, so both carry an identical block format.
+    """
+    body = bytes([len(message)]) + message.ljust(max_bytes, b"\x00")
+    return np.unpackbits(np.frombuffer(body + zlib.crc32(body).to_bytes(4, "big"), dtype=np.uint8))
+
+
+def parse_payload(bits: np.ndarray, max_bytes: int) -> bytes | None:
+    """Inverse of :func:`payload_bits`; ``None`` if the CRC or declared length is invalid."""
+    raw = np.packbits(bits).tobytes()
+    body, crc = raw[:-4], raw[-4:]
+    if zlib.crc32(body).to_bytes(4, "big") != crc or not 1 <= body[0] <= max_bytes:
+        return None
+    return body[1 : 1 + body[0]]

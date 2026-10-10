@@ -4,7 +4,7 @@
 
 *Veridia: Tracing Truth Through Digital Images*
 
-> **Status: Phase 5, research prototype.** Evidence intake, metadata, LSB steganography, spatial- and DCT-domain watermarking, robustness experiments, statistical steganalysis, image-integrity analysis, experimental error level analysis and forensic comparison are connected in one investigation workflow. Evidence is persisted under `storage/`, the provenance timeline is a SHA-256 hash chain with tamper verification, and investigations export as HTML and JSON reports. See [Planned](#planned) for what is not implemented.
+> **Status: Phase 5, research prototype.** Evidence intake, metadata, LSB steganography (sequential, keyed and ±1 matching), spatial-, DCT- and DWT-domain watermarking, robustness experiments with parameter sweeps, statistical steganalysis, image-integrity analysis, experimental error level analysis and forensic comparison are connected in one investigation workflow. Evidence is persisted under `storage/`, the provenance timeline is a SHA-256 hash chain with tamper verification, and investigations export as HTML and JSON reports. See [Planned](#planned) for what is not implemented.
 
 ---
 
@@ -54,12 +54,15 @@ Investigating a digital image rarely depends on one technique. An analyst may ne
 
 - **Evidence ingestion:** upload of PNG/JPEG/BMP with extension, file-signature and decode validation; size (10 MB) and pixel (8 MP) limits; sanitized filename; unique evidence ID; SHA-256; dimensions; timestamp. The original bytes are stored unmodified.
 - **Metadata extraction:** format, dimensions, colour mode, bit depth, ICC profile and EXIF (including Exif and GPS sub-IFDs). Each field is reported as *available*, *not available* or *unknown*; nothing is inferred.
-- **LSB steganography:** embed and extract UTF-8 text, capacity calculation and utilization, rejection of over-capacity payloads, graceful handling of images without a payload.
+- **LSB steganography:** embed and extract UTF-8 text, capacity calculation and utilization, rejection of over-capacity payloads, graceful handling of images without a payload. Three variants: the original sequential embedder, a **keyed** embedder (pseudo-random sample order derived from a secret key) and **LSB matching** (±1 adjustment instead of bit replacement). All three produce derived artifacts with provenance.
+- **Experimental sample-pair screen and detector evaluation:** an adjacent-pair parity statistic and an evaluation harness reporting detection and false-positive rates for labelled cover/stego images. Available through the API only (not in the steganalysis report, the investigation pipeline or the UI). It is not a calibrated sample-pair estimator.
 - **Steganalysis:** per-channel statistics (mean, std, entropy, LSB ratios), histograms and pair-of-values differences, the chi-square attack (whole image and sequential prefixes), RS analysis, LSB-plane images, and a direct known-cover vs. suspected-image comparison. Results are reported as measurements and potential indicators.
 - **Spatial-domain watermarking:** keyed, redundant LSB watermark with embed and verify/extract.
 - **DCT-domain watermarking:** blind watermark in the relation between two mid-frequency coefficients of 8×8 luminance DCT blocks, with adjustable strength, embed and verify/extract, and a DCT-coefficient visualisation.
-- **Robustness testing:** JPEG recompression, resize-and-restore, Gaussian noise, brightness, contrast and border crop; single experiments (stored with provenance) or a full suite, reporting PSNR/SSIM, raw bit error rate and verification status.
-- **Method comparison:** spatial vs. DCT watermark on the same image and message: imperceptibility, verification and the same attack suite, side by side.
+- **DWT-domain watermarking:** blind watermark in the relation between the HL and LH detail sub-bands of a one-level Haar wavelet transform of the luminance channel (transform written directly in NumPy), with adjustable strength, embed and verify/extract, and a sub-band visualisation.
+- **Robustness testing:** JPEG recompression, resize-and-restore, Gaussian noise, brightness, contrast, border crop, true crop (border removed and rescaled) and rotation, for all three watermarking methods; single experiments (stored with provenance) or a full suite, reporting PSNR/SSIM, raw bit error rate and verification status.
+- **Parameter sweeps:** one attack swept across a range for one or all three methods (JPEG quality 10-100 by default), plotted as bit error rate with verified and not-recovered points distinguished. Sweeps are bounded and validated before any artifact is created.
+- **Method comparison:** spatial, DCT and DWT watermarks on the same image and message: imperceptibility, verification and the same attack suite, side by side.
 - **Quality metrics:** MSE, PSNR, SSIM between original and processed images.
 - **Evidence object and provenance chain:** each evidence item records its identity, metadata, every **derived artifact** (own ID and SHA-256, parent image and parent hash, operation, timestamp), every image-producing operation, every recorded analysis result, and a **timeline** of the operations the application performed.
 - **Common analysis results:** every analyzer returns the same structure (status, measurements, findings, interpretation, limitations, timestamp). Each **finding** states the observation, the measurement supporting it, what it may indicate, and what it does *not* establish.
@@ -72,12 +75,12 @@ Investigating a digital image rarely depends on one technique. An analyst may ne
 - **Tamper verification:** re-derives the chain, every covered record, artifact lineage and the hash of every stored file, optionally against a head hash recorded elsewhere, and reports exactly which event, record or file is inconsistent.
 - **Investigation reports:** one click exports a machine-readable JSON report and a self-contained, printable HTML rendering (inline thumbnails and SVG, no scripts); both are hashed, stored and anchored in the chain.
 - **Extensible provenance operations:** operation names are registered identifiers with labels and categories (`GET /api/provenance/operations`) rather than a closed enum, so new operations need no schema or frontend change.
-- **Frontend:** Dashboard, Evidence, Investigation, Steganography, Steganalysis, Watermarking (Spatial / DCT / Compare Methods / Robustness Testing), Comparison, Provenance (SVG provenance graph, hash-chained timeline, verification) and Reports views.
-- **Tests:** 108 focused backend/analysis tests, including persistence round trips, tamper scenarios, ELA on synthetic splices and report escaping.
+- **Frontend:** Dashboard, Evidence, Investigation, Steganography, Steganalysis, Watermarking (Spatial / DCT / DWT / Compare Methods / Robustness Testing), Comparison, Provenance (SVG provenance graph, hash-chained timeline, verification) and Reports views. The Steganography page offers the sequential, keyed and LSB-matching modes.
+- **Tests:** a pytest suite under `tests/` (run `pytest`) covering the analysis algorithms, the API workflows, persistence round trips, tamper scenarios, ELA on synthetic splices, report escaping and request validation. It uses deterministic synthetic images; the test count changes as the project grows, so run `pytest` for the current number.
 
 ### Planned
 
-Calibrated manipulation localisation (ELA is experimental), DWT-domain and geometrically robust watermarking, further steganalysis (e.g. sample-pair analysis, LSB matching), multi-evidence cases, authentication. See the [Roadmap](#roadmap).
+Calibrated manipulation localisation (ELA is experimental), geometrically robust watermarking (none of the implemented methods resynchronises after rotation or a true crop), a calibrated sample-pair estimator and detectors for LSB matching (the implemented chi-square and RS analyses do not target it), multi-evidence cases, authentication. See the [Roadmap](#roadmap).
 
 ## Technical Methodology
 
@@ -87,6 +90,17 @@ SHA-256 is computed over the exact uploaded bytes and over every generated file.
 ### LSB steganography
 The cover is decoded to 8-bit RGB. The least significant bit of each colour sample, taken in row-major order (R, G, B per pixel), carries one payload bit. Changing an LSB alters a sample by at most 1 of 255, which is normally imperceptible. The stream is `"VRDS" | 4-byte length | payload`. Capacity is `H·W·3/8 − 8` bytes. Outputs are always lossless PNG, because lossy compression (JPEG) would destroy the hidden bits.
 *Limitations:* the payload is not encrypted, the layout is sequential and the header is a fixed marker, so the scheme is easy to detect and read. It is a teaching baseline, not a secure channel.
+
+### Keyed LSB steganography
+Same bit-replacement principle as above, but the samples that carry the payload are visited in a pseudo-random order instead of sequentially. The order is a permutation of all colour samples seeded from SHA-256 of a domain tag, the key length, the key and the image shape, so the same key and an image of the same size reproduce it. The stream is `"VKLS" | 4-byte length | payload`, capacity is `H·W·3/8 − 8` bytes, and a key is required (an empty key is rejected). Extraction with a wrong key, or from an image with no payload, reports that no payload was found. The key is used for embedding and extraction only and is not written to provenance records.
+*Limitations:* the payload is not encrypted, and deriving a PRNG seed from SHA-256 is a demonstration, not production cryptography. Only one bit per sample is implemented: the API's `bits_per_channel` field accepts only `1`.
+
+### LSB matching (±1) steganography
+For each payload bit, at a pseudo-random sample, if the sample's LSB already equals the bit it is left alone; otherwise the sample is changed by +1 or −1 (chosen pseudo-randomly; 0 can only go up and 255 only down). Unlike replacement, this does not push values within pairs (2k, 2k+1) towards equality, which is the effect the chi-square attack looks for. The sample order comes from NumPy's generator seeded with an integer `seed` (0 to 2³²−1). That seed is **not secret**: it is a small integer and is recorded in the provenance parameters. There is no header and no length field, so extraction requires the payload length in bytes and the same seed; capacity is `H·W·3/8` bytes. The embedding itself is vectorised, so large payloads embed quickly.
+*Limitations:* the payload is not encrypted, extraction with a wrong length or seed simply returns other bytes (or reports that they are not valid UTF-8), and the other steganalysis measurements below were not designed to detect it. Measured once, on one 256×256 synthetic image with a random payload at 50% of capacity: the chi-square prefix test and RS analysis both flagged sequential LSB; only RS flagged keyed LSB; neither flagged LSB matching (RS estimate about 0.06, against about 0.04 for the clean cover). This is one image and one payload, not a detection-rate claim.
+
+### Experimental sample-pair screen and detector evaluation
+`analysis/steganography/spa.py` computes a simple statistic over adjacent samples (in row-major order, all channels): the fraction of neighbouring pairs whose LSBs agree, reported as `score = 2·|agree rate − 0.5|` together with the pair counts. It is an **adjacent-pair parity screen**, not the classical sample-pair analysis estimator of embedded payload length, and the score is not a probability. `analysis/steganography/evaluation.py` classifies a score at or above a threshold (default 0.05) as stego and reports, per payload rate, the detection rate on the supplied stego images and the false-positive rate on the supplied cover images. These rates describe only the images and threshold supplied. The screen was not evaluated on real photographs, and is exposed only through `POST /api/steganography/spa/evaluate`.
 
 ### Steganalysis
 All outputs are **measurements and potential indicators**. Natural images, noise and prior processing can produce similar values, and a small or well-spread payload may produce none; nothing here establishes that data is hidden.
@@ -106,15 +120,29 @@ The image is converted to YCbCr and the luminance channel is split into 8×8 blo
 Extraction is **blind** (no original needed): recompute the block DCTs, combine each bit's copies by clipped soft voting, and check the CRC. If the original is supplied, it is used only to report metrics against it.
 *Limitations:* no geometric resynchronisation, so rotation, true cropping or any shift of the 8×8 grid prevents extraction (the resize attack restores the original size). Capacity is 16 bytes, and at least 504 blocks (≈180×180 px) are needed. Strength trades imperceptibility for robustness, and the default (25) was chosen from measurements on test images, not derived.
 
+### DWT-domain watermarking
+The image is converted to YCbCr and a one-level 2-D Haar wavelet transform (implemented directly in NumPy, orthonormal, exactly invertible up to floating-point rounding) splits the luminance channel into four half-size sub-bands: LL (a blurred half-size copy), LH and HL (edge detail) and HH (diagonal detail). Each position of the detail bands carries one bit in the relation between the two directional coefficients at that position: HL − LH is pushed to ≥ +*strength* for a 1 and ≤ −*strength* for a 0, using the same adjustment as the DCT scheme. LL is avoided because it holds the visible structure and HH because compression discards it first. The payload (`length | message ≤ 16 bytes | CRC-32`, 168 bits, the same block as the DCT scheme) is repeated over all positions in a key-permuted order, and the default strength is 8. Because the transform covers the whole image rather than 8×8 blocks, one position per 2×2 pixels is available, so far more copies of the payload are carried than in the DCT scheme.
+Extraction is **blind**, using the same clipped soft voting and CRC check as the DCT scheme.
+*Limitations:* no geometric resynchronisation; capacity is 16 bytes and at least 504 positions (about 48×48 px) are needed; an odd final row or column is left untouched. A single Haar level places LH and HL in the highest frequency octave, so the mark is less JPEG-robust than the DCT mark (measured figures are in the next section). The strength setting of the comparison view applies to the DCT method only, because DCT and DWT strengths are on different scales.
+
 ### Robustness testing
-Attacks (`analysis/watermarking/attacks.py`) are JPEG recompression, resize-and-restore, seeded Gaussian noise, brightness shift, contrast scaling and border crop (filled with black; dimensions kept). Each attack keeps the image dimensions. For each attack VERIDIA records the parameter, the attack's distortion (MSE/PSNR/SSIM relative to the watermarked image), the **raw bit error rate** (carrier bits that differ from what was embedded, before voting) and whether the watermark still verifies. No aggregate "security score" is computed.
+Attacks (`analysis/watermarking/attacks.py`) are JPEG recompression, resize-and-restore, seeded Gaussian noise, brightness shift, contrast scaling, border crop (filled with black; content stays in place), true crop (border removed and the rest rescaled, so content moves) and rotation (content stays rotated). Each attack keeps the image dimensions. For each attack VERIDIA records the parameter, the attack's distortion (MSE/PSNR/SSIM relative to the watermarked image), the **raw bit error rate** (carrier bits that differ from what was embedded, before voting) and whether the watermark still verifies. No aggregate "security score" is computed.
 
-Example, measured once on a 512×384 synthetic test image (message `VERIDIA`, DCT strength 25). These are not general claims:
+**Brightness presets are odd (±25) on purpose.** An even shift never changes a least significant bit, so a spatial LSB mark trivially "survives" it (it did, with ±20, and inflated that method's survival count from 1 to 3). Any odd shift flips every LSB (bit error rate ≈ 1.0). The transform-domain marks are insensitive to the parity.
 
-| | PSNR | SSIM | Verified after attack (15 presets) |
+A parameter sweep (`POST /api/watermark/sweep`) runs one attack across a range, defaulting to JPEG quality 10-100 in steps of 10, or an attack's whole documented range in ten steps. A sweep is limited to 100 points per method (`MAX_SWEEP_POINTS`, because each point is a full attack plus a decode); invalid or excessive requests are rejected before any watermarked artifact is created.
+
+Example, measured on a 512×384 synthetic test image (lossless PNG, message `VERIDIA`, key `k`, default strengths: DCT 25, DWT 8). Survival means the expected message was still recovered. The attack-survival counts were identical on a JPEG-sourced version of the same picture and on a 256×256 version; the counts and the JPEG sweep come from one picture family and are not general claims:
+
+| | PSNR | SSIM | Verified after attack (20 presets) |
 | --- | ---: | ---: | ---: |
-| Spatial LSB watermark | 51.0 dB | 0.996 | 3 / 15 (brightness ×2, 10% crop) |
-| DCT watermark | 41.2 dB | 0.943 | 13 / 15 (failed: JPEG q30, 25% crop) |
+| Spatial LSB watermark | 51.1 dB | 0.996 | 1 / 20 (only the 10% border crop) |
+| DCT watermark | 41.1 dB | 0.943 | 13 / 20 (failed: JPEG q30, 25% crop, both true crops, rotations of 0.5°, 2° and 5°) |
+| DWT watermark | 38.6 dB | 0.903 | 12 / 20 (failed: JPEG q50 and q30, resize 0.5, both true crops, rotations of 0.5°, 2° and 5°) |
+
+JPEG sweep, same image, on the sweep's 10-point grid (verified from quality): spatial never, DCT from 50, DWT from 70. These are grid values, not thresholds. Stepping quality by 1, the lowest quality from which the mark verifies at every higher setting was 41 for DCT and 63 for DWT here. Across 5 images (256×256 and 512×384), 2 messages and 3 chroma-subsampling settings (30 configurations) it was 40-42 for DCT and 61-69 for DWT. The result was insensitive to chroma subsampling (at most 4 quality points) and moved more with the image and message, but only Pillow 12.3.0 was measured.
+
+None of the three methods resynchronises geometry, and the measurements show where that bites. Every true crop tested (2%, 5%, 10%) defeated all three methods in all 11 image/message configurations. For rotation, DCT and DWT still verified at 0.25° in 11 of 11 configurations, but only 3 of 11 (DCT) and 2 of 11 (DWT) at 0.5°, and none at 1° or more; the spatial mark failed at every angle tested. So the 0.5° row above is borderline and depends on the image and message, not a general result.
 
 ### Image-quality metrics
 - **MSE:** mean squared difference over all samples. 0 means identical; lower means less pixel-level change.
@@ -213,8 +241,8 @@ Directories are created 0700. `evidence.json` is replaced atomically (temp file,
 | **Evidence Management** | Multi-evidence cases, retention and deletion policy. |
 | **Metadata & Provenance** | Metadata consistency checks and richer origin/history reasoning. |
 | **Image Integrity** | Calibrated manipulation localisation (noise residuals, double-JPEG detection) beyond the experimental ELA. |
-| **Steganography Analysis** | Further detectors (sample-pair analysis, LSB matching / ±1 embedding), calibrated evaluation on real image sets. |
-| **Digital Watermarking** | DWT-domain and geometrically robust watermarking; more attack types. |
+| **Steganography Analysis** | A calibrated sample-pair estimator, detectors targeting LSB matching, calibrated evaluation on real image sets. |
+| **Digital Watermarking** | Geometrically robust watermarking (synchronisation after rotation or crop), multi-level wavelet embedding, more attack types. |
 | **Forensic Investigation** | Signed chain heads or trusted timestamps; examiner identity and notes. |
 | **Reporting** | PDF output; report diffing between exports. |
 
@@ -272,23 +300,29 @@ VERIDIA reports **forensic indicators and supporting evidence**, not verdicts. I
 - Image-integrity analysis (hash re-verification, JPEG tables, blockiness, channel statistics)
 - Forensic comparison and unified investigation workflow
 
-**Phase 5: Investigation Reports, Persistence & Tamper Evidence** ✔ (this release)
+**Phase 5: Investigation Reports, Persistence & Tamper Evidence** ✔
 - File-based persistence under `storage/` (JSON + image files)
 - SHA-256 hash-chained timeline and tamper verification
 - HTML + JSON investigation reports
 - Experimental error level analysis
 - Extensible provenance operation registry; provenance graph UI
 
+**Phase 5b: DWT Watermarking, Geometric Attacks, Sweeps & Steganography Variants** ✔ (this release)
+- DWT-domain watermarking; three-method comparison
+- Rotation and true-crop attacks; bounded, validated parameter sweeps with a chart
+- Keyed LSB and LSB matching embedding; experimental adjacent-pair screen and evaluation harness
+
 **Phase 6: Further Watermarking & Steganalysis**
-- DWT-domain watermarking; geometric resynchronisation
-- Sample-pair analysis, LSB matching detection
+- Geometric resynchronisation; multi-level wavelet embedding
+- A calibrated sample-pair estimator; detectors for LSB matching
 - Calibrated manipulation localisation; evaluation on real image datasets
 
 ## Limitations
 
 - Image forensics is largely probabilistic; no single signal proves manipulation or authenticity.
-- The LSB steganography and spatial watermark are educational baselines: unencrypted, easily detectable and removable.
-- The DCT watermark has no geometric resynchronisation and a 16-byte capacity. Robustness results are measured on the image at hand and do not generalise automatically.
+- The LSB steganography variants and the spatial watermark are educational baselines: unencrypted and not secure channels. Keyed LSB derives its order from a key but encrypts nothing; the LSB-matching seed is a small public integer, and its extraction needs the payload length.
+- The DCT and DWT watermarks have no geometric resynchronisation and a 16-byte capacity. Robustness results are measured on the image at hand and do not generalise automatically.
+- The adjacent-pair screen is experimental and unvalidated on real photographs; it is not a calibrated sample-pair analysis estimator and is not part of the steganalysis report or investigation pipeline. The keyed LSB API field `bits_per_channel` accepts only `1`.
 - Steganalysis results were validated only on synthetic test images and the tool's own embedder. The chi-square attack assumes random-looking payloads, and RS analysis is experimental. Neither is a calibrated detector.
 - Robustness suites and method comparison run synchronously; on large images they can take several seconds.
 - Integrity findings are descriptive. Blockiness is a heuristic calibrated on synthetic images; JPEG table analysis cannot identify devices or detect double compression.
@@ -338,9 +372,9 @@ npm run build      # type-check and production build
 
 1. Open the **Evidence** page and upload a PNG, JPEG or BMP.
 2. **Investigation:** run the full analysis on the original (optionally with experimental ELA), then again on any derived artifact (optionally with watermark verification). Review the findings, the ELA overlay, the artifact tree and the timeline.
-3. **Steganography:** enter text, embed, download, then extract.
+3. **Steganography:** enter text, embed (sequential, keyed or LSB matching), download, then extract. Keyed extraction needs the key; LSB-matching extraction needs the payload length and seed.
 4. **Steganalysis:** pick the original or a derived image as the suspected image (optionally with the evidence as known cover) and review the measurements.
-5. **Watermarking:** use the *Spatial Domain* / *DCT Domain* tabs to embed and verify, *Compare Methods* for a side-by-side measurement, and *Robustness Testing* to embed, attack and attempt extraction.
+5. **Watermarking:** use the *Spatial Domain* / *DCT Domain* / *DWT Domain* tabs to embed and verify, *Compare Methods* for a side-by-side measurement of all three, and *Robustness Testing* to embed, attack, sweep a parameter and attempt extraction.
 6. **Comparison:** choose a reference and a derived or suspected image to compare (difference map, metrics, histograms, channel statistics).
 7. **Provenance:** check record integrity, explore the provenance graph, and review the hash-chained timeline, operations and recorded analyses.
 8. **Reports:** generate a report, preview or download the HTML and JSON, and later verify the record against the head hash a report covers.
@@ -353,6 +387,8 @@ From the repository root, with the virtual environment active:
 pytest
 ```
 
+The suite is deterministic (fixed seeds, synthetic images, a temporary storage directory per test). Some assertions pin measured watermark-robustness outcomes under Pillow's JPEG encoder; they were checked with Pillow 12.3.0 only.
+
 ### API
 
 | Method | Path | Purpose |
@@ -364,16 +400,23 @@ pytest
 | GET | `/api/steganography/capacity/{id}` | LSB capacity |
 | POST | `/api/steganography/embed` | Embed payload |
 | POST | `/api/steganography/extract` | Extract payload |
+| POST | `/api/steganography/keyed-lsb/embed` | Embed with a key-derived sample order (`key` required; `bits_per_channel` accepts only `1`) |
+| POST | `/api/steganography/keyed-lsb/extract` | Extract a keyed payload (needs the key) |
+| POST | `/api/steganography/lsb-matching/embed` | Embed with ±1 LSB matching (`seed`, default 0) |
+| POST | `/api/steganography/lsb-matching/extract` | Extract an LSB-matching payload (needs `payload_bytes` and the same `seed`) |
+| POST | `/api/steganography/spa/evaluate` | Experimental adjacent-pair screen: detection and false-positive rates for given cover and stego image IDs (not recorded) |
 | GET | `/api/steganalysis/report/{id}` | Statistics, histograms, chi-square, RS, indicators |
 | POST | `/api/steganalysis/cover-comparison` | Known cover vs. suspected image |
 | GET | `/api/steganalysis/lsb-plane/{id}/{channel}` | LSB-plane image |
-| POST | `/api/watermark/embed` | Embed watermark (`method`: `spatial_lsb` or `dct`) |
+| POST | `/api/watermark/embed` | Embed watermark (`method`: `spatial_lsb`, `dct` or `dwt`; optional `strength` for `dct` and `dwt`) |
 | POST | `/api/watermark/verify` | Verify / extract watermark (optional `reference_id`) |
 | GET | `/api/watermark/attacks` | Attack catalogue and presets |
 | POST | `/api/watermark/attack` | Apply one attack and attempt extraction |
 | POST | `/api/watermark/robustness` | Full attack suite |
-| POST | `/api/watermark/compare-methods` | Spatial vs. DCT on the same image |
+| POST | `/api/watermark/sweep` | Sweep one attack across a range for one or several methods (default JPEG quality 10-100; at most 100 points per method; validated before any artifact is created) |
+| POST | `/api/watermark/compare-methods` | Spatial, DCT and DWT on the same image (`strength` applies to DCT only) |
 | GET | `/api/watermark/dct-map/{id}` | Block-DCT magnitude visualisation |
+| GET | `/api/watermark/dwt-map/{id}` | One-level Haar sub-band visualisation (LL/LH over HL/HH) |
 | POST | `/api/analysis/compare` | Quality metrics for two images (not recorded) |
 | GET | `/api/analysis/difference/{a}/{b}` | Difference image |
 | GET | `/api/analysis/ela/{id}?quality=90` | Error-level map (not recorded) |
@@ -398,8 +441,8 @@ veridia/
 │   ├── core/            Hashing, image decode/encode, Analyzer contract, AnalysisResult/Finding
 │   ├── metadata/        Metadata/EXIF extraction and findings
 │   ├── integrity/       Hash re-verification, JPEG tables, blockiness, ELA, forensic comparison
-│   ├── steganography/   LSB embed/extract; steganalysis (histogram/chi-square, RS, LSB analysis)
-│   ├── watermarking/    Spatial LSB and DCT watermarks, block DCT, attacks, robustness runner
+│   ├── steganography/   LSB, keyed LSB and LSB-matching embed/extract; steganalysis (histogram/chi-square, RS, LSB analysis); experimental adjacent-pair screen and evaluation harness
+│   ├── watermarking/    Spatial LSB, DCT and DWT watermarks, block DCT and Haar transforms, attacks, robustness runner and sweeps
 │   ├── metrics/         MSE, PSNR, SSIM, difference map/statistics, channel statistics
 │   └── provenance/      SHA-256 hash chain (canonical JSON, link verification); inference not implemented
 ├── storage/             Persisted evidence, images and reports (git-ignored, created at startup)

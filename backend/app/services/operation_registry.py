@@ -77,6 +77,8 @@ for _spec in (
                   "Keyed, redundant LSB watermark (message and key not recorded)."),
     OperationSpec("dct_watermark_embed", "DCT watermark embed", "DCT-watermarked image", "watermarking",
                   "Block-DCT coefficient-pair watermark in the luminance channel (message and key not recorded)."),
+    OperationSpec("dwt_watermark_embed", "DWT watermark embed", "DWT-watermarked image", "watermarking",
+                  "One-level Haar wavelet watermark in the luminance detail sub-bands (message and key not recorded)."),
     OperationSpec("attack", "Attack (robustness experiment)", "Attacked image", "attack",
                   "Signal-processing attack applied to measure watermark robustness; attack name and parameter recorded."),
 ):

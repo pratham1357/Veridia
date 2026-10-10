@@ -6,7 +6,11 @@ import type { WatermarkMethod } from "../types/watermark";
 export const METHOD_LABEL: Record<WatermarkMethod, string> = {
   spatial_lsb: "Spatial domain (LSB)",
   dct: "Transform domain (DCT)",
+  dwt: "Transform domain (DWT)",
 };
+
+/** Methods in the order they are presented, so tabs, toggles and comparisons stay consistent. */
+export const WATERMARK_METHODS = ["spatial_lsb", "dct", "dwt"] as const;
 
 export const ANALYSIS_LABEL: Record<AnalysisType, string> = {
   metadata: "Metadata",
@@ -54,4 +58,4 @@ export function imageName(evidence: EvidenceArtifact, imageId: string): string {
   return evidence.derived_artifacts.find((a) => a.artifact_id === imageId)?.filename ?? imageId;
 }
 
-export const MAX_MESSAGE_BYTES: Record<WatermarkMethod, number> = { spatial_lsb: 64, dct: 16 };
+export const MAX_MESSAGE_BYTES: Record<WatermarkMethod, number> = { spatial_lsb: 64, dct: 16, dwt: 16 };
